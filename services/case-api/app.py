@@ -15,31 +15,18 @@ EVIDENCE_BUCKET = os.environ.get('EVIDENCE_BUCKET')
 CASES_TABLE = os.environ.get('CASES_TABLE')
 AI_EXTRACTOR_FUNCTION_NAME = os.environ.get('AI_EXTRACTOR_FUNCTION_NAME')
 
-# Initialize clients lazily outside handlers for execution environment reuse
-_dynamodb = None
-_s3 = None
-_lambda = None
+if not EVIDENCE_BUCKET or not CASES_TABLE:
+    logger.warning("Missing required environment variables (EVIDENCE_BUCKET, CASES_TABLE)")
 
-def get_dynamodb():
-    global _dynamodb
-    if not _dynamodb:
-        _dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
-    return _dynamodb
 
-def get_s3():
-    global _s3
-    if not _s3:
-        _s3 = boto3.client('s3', region_name=AWS_REGION)
-    return _s3
+# Initialize clients globally for execution environment reuse
+try:
+    dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
+    s3_client = boto3.client('s3', region_name=AWS_REGION)
+    lambda_client = boto3.client('lambda', region_name=AWS_REGION)
+except Exception as e:
+    logger.error(f"Failed to initialize AWS clients: {e}")
 
-def get_lambda():
-    global _lambda
-    if not _lambda:
-        _lambda = boto3.client('lambda', region_name=AWS_REGION)
-    return _lambda
-
-def _get_table():
-    return get_dynamodb().Table(CASES_TABLE)
 
 def _build_response(status_code, body):
     return {
@@ -67,7 +54,6 @@ def _invoke_ai_extractor(case_id: str):
         return
         
     try:
-        lambda_client = get_lambda()
         lambda_client.invoke(
             FunctionName=AI_EXTRACTOR_FUNCTION_NAME,
             InvocationType='Event',
@@ -84,7 +70,7 @@ def create_case_handler(event, context):
         now = datetime.now(timezone.utc)
         expire_at = int((now + timedelta(days=7)).timestamp())
         
-        table = _get_table()
+        table = dynamodb.Table(CASES_TABLE)
         table.put_item(
             Item={
                 'caseId': case_id,
@@ -95,7 +81,6 @@ def create_case_handler(event, context):
         )
         
         object_key = f"cases/{case_id}/input"
-        s3_client = get_s3()
         upload_url = s3_client.generate_presigned_url(
             'put_object',
             Params={
@@ -128,7 +113,7 @@ def analyze_case_handler(event, context):
         if not case_id or not _validate_uuid(case_id):
             return _build_response(400, {"error": "Invalid caseId"})
             
-        table = _get_table()
+        table = dynamodb.Table(CASES_TABLE)
         response = table.get_item(Key={'caseId': case_id})
         
         if 'Item' not in response:
@@ -165,7 +150,7 @@ def get_case_handler(event, context):
         if not case_id or not _validate_uuid(case_id):
             return _build_response(400, {"error": "Invalid caseId"})
             
-        table = _get_table()
+        table = dynamodb.Table(CASES_TABLE)
         response = table.get_item(Key={'caseId': case_id})
         
         if 'Item' not in response:
