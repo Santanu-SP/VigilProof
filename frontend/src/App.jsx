@@ -108,7 +108,6 @@ function App() {
         }
       } catch (err) {
         // Log silently or handle network error during polling
-        console.warn('Polling error:', err);
       }
     }, 2000);
   };
@@ -181,6 +180,15 @@ function App() {
               onDragOver={handleDrag}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
+              tabIndex={0}
+              role="button"
+              aria-label="Upload screenshot"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
             >
               <input
                 ref={fileInputRef}
@@ -211,7 +219,7 @@ function App() {
           <button 
             className="btn-primary" 
             onClick={handleInspect} 
-            disabled={!file}
+            disabled={!file || stage !== 'HOME'}
           >
             <Search size={20} />
             Inspect safely
