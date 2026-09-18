@@ -12,7 +12,7 @@ export default function TrustStrip() {
           </div>
           <div className="flex items-center gap-3">
             <ShieldCheck className="text-slate-400" size={20} />
-            <span className="text-sm font-mono text-slate-700">Controlled website inspection</span>
+            <span className="text-sm font-mono text-slate-700">Deterministic URL checks</span>
           </div>
           <div className="flex items-center gap-3">
             <Lock className="text-slate-400" size={20} />

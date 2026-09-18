@@ -21,14 +21,14 @@ export default function EvidenceTrail() {
         <div className="relative max-w-2xl mx-auto py-10">
           {/* Connecting line */}
           <div className="absolute left-1/2 top-0 bottom-0 w-px bg-slate-200 -translate-x-1/2 z-0"></div>
-          <motion.div 
+          <motion.div
             className="absolute left-1/2 top-0 bottom-0 w-px bg-cyan-500 -translate-x-1/2 z-0 origin-top"
             style={{ scaleY: lineProgress }}
           ></motion.div>
 
           <div className="flex flex-col gap-12 relative z-10">
             {/* Step 1 */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-100px" }}
@@ -41,7 +41,7 @@ export default function EvidenceTrail() {
             </motion.div>
 
             {/* Step 2 */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-100px" }}
@@ -53,7 +53,7 @@ export default function EvidenceTrail() {
             </motion.div>
 
             {/* Step 3 */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-100px" }}
@@ -65,7 +65,7 @@ export default function EvidenceTrail() {
             </motion.div>
 
             {/* Step 4 */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true, margin: "-100px" }}

@@ -17,13 +17,13 @@ export default function EvidenceCard({ signalName, observation, reason, severity
           <Icon size={20} className={config.iconColor} />
           <h4 className={`font-bold ${config.text}`}>{signalName}</h4>
         </div>
-        {score && (
+        {Number.isFinite(score) && (
           <div className={`font-mono text-xs font-bold px-2 py-1 rounded ${config.scoreBg} ${config.text}`}>
             +{score}
           </div>
         )}
       </div>
-      
+
       <div className="flex flex-col gap-3 font-mono text-sm">
         <div className="flex flex-col gap-1">
           <span className={`text-xs uppercase tracking-widest opacity-70 ${config.text}`}>Observed</span>

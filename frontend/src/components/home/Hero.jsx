@@ -6,7 +6,7 @@ export default function Hero({ children }) {
   return (
     <section className="relative overflow-hidden py-24 md:py-32 border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-        <motion.div 
+        <motion.div
           className="flex flex-col z-10"
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -23,21 +23,21 @@ export default function Hero({ children }) {
           <p className="text-lg text-slate-600 font-mono mb-10 max-w-lg leading-relaxed">
             VigilProof helps you examine suspicious screenshots, links, payment demands, and urgency signals before you take risky actions.
           </p>
-          
+
           <div className="mb-6 relative">
             <div className="absolute -inset-1 bg-gradient-to-r from-slate-200 to-slate-100 rounded-xl blur opacity-50"></div>
             <div className="relative bg-white border border-slate-200 p-2 rounded-xl shadow-sm">
               {children}
             </div>
           </div>
-          
+
           <p className="text-xs font-mono text-slate-500 flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
             No credentials required. Never enter passwords or OTPs.
           </p>
         </motion.div>
-        
-        <motion.div 
+
+        <motion.div
           className="relative h-full min-h-[400px] hidden lg:block"
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}

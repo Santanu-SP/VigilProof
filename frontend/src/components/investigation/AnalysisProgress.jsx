@@ -14,10 +14,10 @@ export default function AnalysisProgress({ currentStage, statusMessage }) {
     if (currentStage === 'UPLOADING') {
       return stageId === 'UPLOADING' ? 'active' : 'pending';
     }
-    
+
     const currentIndex = stages.findIndex(s => s.id === statusMessage);
     const itemIndex = stages.findIndex(s => s.id === stageId);
-    
+
     if (currentIndex === -1) {
        return itemIndex === 0 ? 'completed' : (itemIndex === 1 ? 'active' : 'pending');
     }
@@ -38,24 +38,24 @@ export default function AnalysisProgress({ currentStage, statusMessage }) {
           </div>
           <span className="text-xs font-mono text-slate-500">v_2.1</span>
         </div>
-        
+
         <div className="p-8 font-mono">
           <div className="flex flex-col gap-6">
             {stages.map((stage, index) => {
               const state = getStageState(stage.id);
               const Icon = state === 'completed' ? CheckCircle2 : stage.icon;
-              
+
               return (
                 <div key={stage.id} className="flex gap-4 relative">
                   {/* Connector Line */}
                   {index < stages.length - 1 && (
                     <div className="absolute left-[11px] top-7 bottom-[-20px] w-[2px] bg-slate-100"></div>
                   )}
-                  
+
                   {/* Icon Node */}
                   <div className={`relative z-10 w-6 h-6 rounded flex items-center justify-center border transition-colors duration-300
-                    ${state === 'completed' ? 'bg-slate-900 border-slate-900 text-slate-50' : 
-                      state === 'active' ? 'bg-cyan-50 border-cyan-500 text-cyan-600' : 
+                    ${state === 'completed' ? 'bg-slate-900 border-slate-900 text-slate-50' :
+                      state === 'active' ? 'bg-cyan-50 border-cyan-500 text-cyan-600' :
                       'bg-slate-50 border-slate-200 text-slate-300'}`}
                   >
                     {state === 'active' ? (
@@ -64,19 +64,19 @@ export default function AnalysisProgress({ currentStage, statusMessage }) {
                       <Icon size={12} />
                     )}
                   </div>
-                  
+
                   {/* Content */}
                   <div className="flex flex-col pt-0.5">
                     <span className={`text-sm tracking-tight transition-colors duration-300
-                      ${state === 'completed' ? 'text-slate-900 font-medium' : 
-                        state === 'active' ? 'text-cyan-700 font-medium' : 
+                      ${state === 'completed' ? 'text-slate-900 font-medium' :
+                        state === 'active' ? 'text-cyan-700 font-medium' :
                         'text-slate-400'}`}
                     >
                       {state === 'active' ? '> ' + stage.label + '...' : stage.label}
                     </span>
                     <AnimatePresence>
                       {state === 'active' && (
-                        <motion.span 
+                        <motion.span
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: 'auto' }}
                           exit={{ opacity: 0, height: 0 }}
@@ -92,10 +92,10 @@ export default function AnalysisProgress({ currentStage, statusMessage }) {
             })}
           </div>
         </div>
-        
+
         {/* Scanning beam effect at bottom */}
         <div className="h-1 w-full bg-slate-100 relative overflow-hidden">
-          <motion.div 
+          <motion.div
             className="absolute top-0 bottom-0 w-1/3 bg-cyan-400 opacity-50 blur-[2px]"
             animate={{ left: ['-30%', '100%'] }}
             transition={{ duration: 1.5, ease: "linear", repeat: Infinity }}

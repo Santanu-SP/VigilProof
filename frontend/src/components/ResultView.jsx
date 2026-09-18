@@ -13,7 +13,7 @@ export default function ResultView({ result, onReset }) {
 
   return (
     <div className="max-w-5xl mx-auto w-full px-6 py-12">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col gap-8"
@@ -34,25 +34,24 @@ export default function ResultView({ result, onReset }) {
             <h3 className="text-lg font-bold text-slate-900 uppercase tracking-widest font-mono border-b border-slate-200 pb-2">Why this was flagged</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {risk.signals.map((signal, idx) => {
-                let severity = 'warning';
-                let reason = 'Signal observed in content';
-                if (signal.toLowerCase().includes('urgency')) {
-                  reason = 'Artificial urgency pressures victims to act quickly.';
-                } else if (signal.toLowerCase().includes('payment')) {
-                  severity = 'threat';
-                  reason = 'Direct requests for payment are a strong indicator of fraud.';
-                } else if (signal.toLowerCase().includes('link')) {
-                  reason = 'Suspicious or hidden links attempt to steal credentials.';
-                }
+                const structuredSignal = typeof signal === 'object' && signal !== null;
+                const title = structuredSignal ? signal.title || signal.code : signal;
+                const detail = structuredSignal ? signal.detail : 'Reported by the risk engine.';
+                const source = structuredSignal && signal.source
+                  ? `Source: ${signal.source}`
+                  : 'Risk signal';
+                const weight = structuredSignal && Number.isFinite(signal.weight)
+                  ? signal.weight
+                  : null;
 
                 return (
-                  <EvidenceCard 
-                    key={idx}
-                    signalName={signal}
-                    observation="Found in message content"
-                    reason={reason}
-                    severity={severity}
-                    score={Math.floor(risk.evidenceScore / risk.signals.length) || 10} 
+                  <EvidenceCard
+                    key={structuredSignal && signal.code ? signal.code : idx}
+                    signalName={title || 'Risk signal'}
+                    observation={source}
+                    reason={detail || 'No additional detail was provided.'}
+                    severity={weight >= 25 ? 'threat' : 'warning'}
+                    score={weight}
                   />
                 );
               })}
@@ -64,7 +63,7 @@ export default function ResultView({ result, onReset }) {
         {evidence && (
           <div className="flex flex-col gap-4 mt-4">
             <h3 className="text-lg font-bold text-slate-900 uppercase tracking-widest font-mono border-b border-slate-200 pb-2">Extracted Evidence</h3>
-            
+
             <div className="flex flex-wrap gap-3">
               {evidence.claimedOrganization && (
                 <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-md px-3 py-1.5 font-mono text-sm">
@@ -104,7 +103,7 @@ export default function ResultView({ result, onReset }) {
                   </ul>
                 </div>
               )}
-              
+
               {evidence.phoneNumbers && evidence.phoneNumbers.length > 0 && (
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
                   <h5 className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 font-mono">
@@ -138,7 +137,7 @@ export default function ResultView({ result, onReset }) {
         )}
 
         <div className="mt-8 flex justify-center">
-          <button 
+          <button
             className="px-6 py-3 bg-white border border-slate-300 text-slate-700 font-medium rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
             onClick={onReset}
           >
@@ -150,4 +149,3 @@ export default function ResultView({ result, onReset }) {
     </div>
   );
 }
-

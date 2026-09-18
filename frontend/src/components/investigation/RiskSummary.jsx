@@ -7,7 +7,7 @@ export default function RiskSummary({ risk }) {
   const getRiskConfig = (level) => {
     switch(level) {
       case 'HIGH': return { icon: AlertOctagon, bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-900', iconColor: 'text-red-600', label: 'High Risk' };
-      case 'MEDIUM': return { icon: AlertTriangle, bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-900', iconColor: 'text-amber-600', label: 'Moderate Risk' };
+      case 'MODERATE': return { icon: AlertTriangle, bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-900', iconColor: 'text-amber-600', label: 'Moderate Risk' };
       case 'LOW': return { icon: ShieldCheck, bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-900', iconColor: 'text-green-600', label: 'Low Risk' };
       default: return { icon: AlertTriangle, bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-900', iconColor: 'text-slate-600', label: 'Unknown Risk' };
     }
@@ -30,7 +30,7 @@ export default function RiskSummary({ risk }) {
           </div>
         )}
       </div>
-      
+
       <p className={`text-sm font-mono opacity-80 ${config.text}`}>
         This score summarizes observable risk signals found in the evidence. It is not a mathematical probability that something is fraudulent.
       </p>

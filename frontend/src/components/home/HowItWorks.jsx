@@ -16,8 +16,8 @@ export default function HowItWorks() {
     },
     {
       icon: <ShieldAlert size={24} />,
-      title: '3. Inspect URLs safely',
-      description: 'Suspicious links are loaded in a controlled environment, looking for credential forms.'
+      title: '3. Check URL indicators',
+      description: 'URLs are checked for suspicious syntax and claimed-organization domain mismatches.'
     },
     {
       icon: <CheckCircle2 size={24} />,
@@ -33,10 +33,10 @@ export default function HowItWorks() {
           <span className="text-xs font-mono font-bold tracking-widest uppercase text-slate-500 mb-4 inline-block">The Process</span>
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900">How VigilProof works</h2>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {steps.map((step, idx) => (
-            <motion.div 
+            <motion.div
               key={idx}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}

@@ -37,12 +37,12 @@ export default function EvidenceAnimation() {
         <div className="w-3 h-3 rounded-full bg-red-500"></div>
         <div className="w-3 h-3 rounded-full bg-amber-500"></div>
         <div className="w-3 h-3 rounded-full bg-green-500"></div>
-        <span className="text-slate-400 ml-4 text-xs">vigil_terminal_v2.1</span>
+        <span className="text-slate-400 ml-4 text-xs">Illustrative analysis</span>
       </div>
-      
+
       <div className="p-6 text-slate-300 relative h-[350px] overflow-hidden">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:20px_20px] opacity-20"></div>
-        
+
         <AnimatePresence>
           {visibleLines.map((line, index) => (
             <motion.div
@@ -56,13 +56,13 @@ export default function EvidenceAnimation() {
             </motion.div>
           ))}
         </AnimatePresence>
-        
-        <motion.div 
+
+        <motion.div
           className="w-2 h-4 bg-slate-400 inline-block ml-2 mt-1"
           animate={{ opacity: [1, 0, 1] }}
           transition={{ duration: 1, repeat: Infinity }}
         />
-        
+
         {/* Scanning laser line */}
         <motion.div
           className="absolute left-0 right-0 h-px bg-cyan-500/50 shadow-[0_0_8px_rgba(6,182,212,0.8)] z-10"

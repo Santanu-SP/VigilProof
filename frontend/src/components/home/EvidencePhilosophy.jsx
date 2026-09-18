@@ -9,13 +9,13 @@ export default function EvidencePhilosophy() {
           <span className="text-xs font-mono font-bold tracking-widest uppercase text-slate-400 mb-4 inline-block">Why VigilProof</span>
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-white mb-6">Don't trust black-box AI. Verify the evidence.</h2>
           <p className="text-lg text-slate-400 font-mono leading-relaxed">
-            Typical security tools ask you to blindly trust a percentage score. 
+            Typical security tools ask you to blindly trust a percentage score.
             VigilProof shows you exactly what observable signals make a message dangerous.
           </p>
         </div>
 
         <div className="flex flex-col md:flex-row items-stretch justify-center gap-8 relative">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, x: -20 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true, margin: "-50px" }}
@@ -37,7 +37,7 @@ export default function EvidencePhilosophy() {
             <span className="bg-slate-800 border border-slate-700 w-12 h-12 rounded-full flex items-center justify-center font-mono text-sm text-slate-400 italic">vs</span>
           </div>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, x: 20 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true, margin: "-50px" }}

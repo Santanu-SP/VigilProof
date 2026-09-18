@@ -2,21 +2,21 @@ import React from 'react';
 import { UploadCloud, FileImage, X, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export default function UploadPanel({ 
-  file, 
-  dragActive, 
-  handleDrag, 
-  handleDrop, 
-  handleChange, 
-  handleRemoveFile, 
-  handleInspect, 
-  fileInputRef 
+export default function UploadPanel({
+  file,
+  dragActive,
+  handleDrag,
+  handleDrop,
+  handleChange,
+  handleRemoveFile,
+  handleInspect,
+  fileInputRef
 }) {
   return (
     <div id="inspect" className="w-full">
       <AnimatePresence mode="wait">
         {!file ? (
-          <motion.div 
+          <motion.div
             key="upload-zone"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -54,7 +54,7 @@ export default function UploadPanel({
             <p className="text-slate-400 text-xs">Drop a screenshot of an email, SMS, or website</p>
           </motion.div>
         ) : (
-          <motion.div 
+          <motion.div
             key="file-preview"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -71,17 +71,17 @@ export default function UploadPanel({
                   <span className="font-mono text-xs text-slate-500">{(file.size / (1024 * 1024)).toFixed(2)} MB</span>
                 </div>
               </div>
-              <button 
-                className="text-slate-400 hover:text-slate-900 transition-colors p-2" 
+              <button
+                className="text-slate-400 hover:text-slate-900 transition-colors p-2"
                 onClick={handleRemoveFile}
                 aria-label="Remove file"
               >
                 <X size={18} />
               </button>
             </div>
-            
-            <button 
-              className="w-full bg-slate-900 hover:bg-slate-800 text-slate-50 font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors" 
+
+            <button
+              className="w-full bg-slate-900 hover:bg-slate-800 text-slate-50 font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
               onClick={handleInspect}
             >
               <Search size={18} />

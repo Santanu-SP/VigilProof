@@ -9,7 +9,7 @@ export default function Navbar() {
           <Shield className="w-6 h-6" />
           <span className="font-bold tracking-tight text-lg">VigilProof</span>
         </div>
-        
+
         <div className="hidden md:flex items-center gap-8">
           <a href="#how-it-works" className="text-sm font-mono text-slate-600 hover:text-slate-900 transition-colors">How it works</a>
           <a href="#why-vigilproof" className="text-sm font-mono text-slate-600 hover:text-slate-900 transition-colors">Why VigilProof</a>
