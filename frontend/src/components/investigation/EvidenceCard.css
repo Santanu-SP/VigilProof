@@ -1,0 +1,78 @@
+.evidence-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.evidence-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 0.75rem;
+}
+
+.evidence-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.evidence-title {
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--text-primary);
+}
+
+.evidence-score {
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--color-slate-100);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.evidence-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.evidence-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.field-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.field-value {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.field-value.reason {
+  color: var(--text-secondary);
+}
+
+/* Severities */
+.severity-threat { border-left: 4px solid var(--color-red-500); }
+.threat-icon { color: var(--color-red-500); }
+
+.severity-warning { border-left: 4px solid var(--color-amber-500); }
+.warning-icon { color: var(--color-amber-500); }
+
+.severity-info { border-left: 4px solid var(--color-primary-500); }
+.info-icon { color: var(--color-primary-500); }

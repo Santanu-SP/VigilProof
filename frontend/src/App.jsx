@@ -1,7 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, FileImage, X, ShieldAlert, Loader2, Search, CheckCircle2 } from 'lucide-react';
-import ResultView from './components/ResultView';
 import { createCase, uploadEvidence, startAnalysis, getCase } from './services/api';
+
+// Layout
+import Navbar from './components/layout/Navbar';
+import Footer from './components/layout/Footer';
+
+// Home
+import Hero from './components/home/Hero';
+import TrustStrip from './components/home/TrustStrip';
+import HowItWorks from './components/home/HowItWorks';
+import EvidencePhilosophy from './components/home/EvidencePhilosophy';
+import EvidenceTrail from './components/home/EvidenceTrail';
+import SafetySection from './components/home/SafetySection';
+
+// Investigation
+import UploadPanel from './components/investigation/UploadPanel';
+import AnalysisProgress from './components/investigation/AnalysisProgress';
+import ResultView from './components/ResultView';
+
+import './App.css';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -98,11 +115,11 @@ function App() {
           setError('Analysis failed. The message could not be processed.');
           setStage('HOME');
         } else if (caseData.status === 'extracting_evidence') {
-          setStatusMessage('Extracting visible evidence...');
+          setStatusMessage('extracting_evidence');
         } else if (caseData.status === 'checking_indicators') {
-          setStatusMessage('Checking indicators...');
+          setStatusMessage('checking_indicators');
         } else if (caseData.status === 'preparing_result') {
-          setStatusMessage('Preparing result...');
+          setStatusMessage('preparing_result');
         } else {
           setStatusMessage('Reading screenshot...');
         }
@@ -124,7 +141,7 @@ function App() {
     try {
       setError(null);
       setStage('UPLOADING');
-      setStatusMessage('Evidence uploaded');
+      setStatusMessage('UPLOADING');
 
       // 1. Create Case
       const { caseId, uploadUrl } = await createCase();
@@ -134,7 +151,7 @@ function App() {
 
       // 3. Start Analysis
       setStage('PROCESSING');
-      setStatusMessage('Reading screenshot...');
+      setStatusMessage('extracting_evidence');
       await startAnalysis(caseId);
 
       // 4. Poll for result
@@ -156,92 +173,47 @@ function App() {
     }
   };
 
+  // UploadPanel props
+  const uploadProps = {
+    file, dragActive, handleDrag, handleDrop, handleChange, handleRemoveFile, handleInspect, fileInputRef
+  };
+
   return (
-    <div className="container">
-      <header>
-        <h1>VigilProof</h1>
-        <p className="subtitle">Inspect suspicious messages before you trust them.</p>
-      </header>
+    <div className="app-layout">
+      <Navbar />
 
-      {error && (
-        <div className="error-message">
-          <ShieldAlert size={20} />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {stage === 'HOME' && (
-        <div className="card">
-          {!file ? (
-            <div 
-              className={`upload-area ${dragActive ? 'drag-active' : ''}`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              tabIndex={0}
-              role="button"
-              aria-label="Upload screenshot"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  fileInputRef.current?.click();
-                }
-              }}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleChange}
-              />
-              <UploadCloud className="upload-icon" size={48} />
-              <div className="upload-text">Select suspicious screenshot</div>
-              <div className="upload-hint">or drag and drop it here</div>
+      <main>
+        {error && (
+          <div className="container mt-8">
+            <div className="error-message">
+              <span>{error}</span>
             </div>
-          ) : (
-            <div className="file-preview">
-              <div className="file-info">
-                <FileImage size={24} color="var(--primary-color)" />
-                <span className="file-name">{file.name}</span>
-              </div>
-              <button 
-                className="remove-btn" 
-                onClick={handleRemoveFile}
-                aria-label="Remove file"
-              >
-                <X size={20} />
-              </button>
-            </div>
-          )}
+          </div>
+        )}
 
-          <button 
-            className="btn-primary" 
-            onClick={handleInspect} 
-            disabled={!file || stage !== 'HOME'}
-          >
-            <Search size={20} />
-            Inspect safely
-          </button>
-        </div>
-      )}
+        {stage === 'HOME' && (
+          <>
+            <Hero>
+              <UploadPanel {...uploadProps} />
+            </Hero>
+            <TrustStrip />
+            <HowItWorks />
+            <EvidencePhilosophy />
+            <EvidenceTrail />
+            <SafetySection />
+          </>
+        )}
 
-      {(stage === 'UPLOADING' || stage === 'PROCESSING') && (
-        <div className="card status-view">
-          {stage === 'UPLOADING' ? (
-            <UploadCloud className="status-icon" size={64} />
-          ) : (
-            <Loader2 className="status-icon" size={64} />
-          )}
-          <div className="status-text">{statusMessage}</div>
-          <div className="status-subtext">Please wait while we verify this message.</div>
-        </div>
-      )}
+        {(stage === 'UPLOADING' || stage === 'PROCESSING') && (
+          <AnalysisProgress currentStage={stage} statusMessage={statusMessage} />
+        )}
 
-      {stage === 'RESULT' && (
-        <ResultView result={result} onReset={resetFlow} />
-      )}
+        {stage === 'RESULT' && (
+          <ResultView result={result} onReset={resetFlow} />
+        )}
+      </main>
+
+      <Footer />
     </div>
   );
 }
