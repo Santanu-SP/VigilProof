@@ -1,24 +1,26 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, Suspense, lazy } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { createCase, uploadEvidence, startAnalysis, getCase } from './services/api';
 
-// Layout
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
-
-// Home
-import Hero from './components/home/Hero';
-import TrustStrip from './components/home/TrustStrip';
-import HowItWorks from './components/home/HowItWorks';
-import EvidencePhilosophy from './components/home/EvidencePhilosophy';
-import EvidenceTrail from './components/home/EvidenceTrail';
-import SafetySection from './components/home/SafetySection';
-
-// Investigation
-import UploadPanel from './components/investigation/UploadPanel';
-import AnalysisProgress from './components/investigation/AnalysisProgress';
-import ResultView from './components/ResultView';
+import { SmoothScroll } from './components/layout/SmoothScroll';
+import { PageTransition } from './components/layout/PageTransition';
+import { Skeleton } from './components/ui/Skeleton';
 
 import './App.css';
+
+// Lazy loaded sections
+const Hero = lazy(() => import('./components/home/Hero'));
+const TrustStrip = lazy(() => import('./components/home/TrustStrip'));
+const HowItWorks = lazy(() => import('./components/home/HowItWorks'));
+const EvidencePhilosophy = lazy(() => import('./components/home/EvidencePhilosophy'));
+const EvidenceTrail = lazy(() => import('./components/home/EvidenceTrail'));
+const SafetySection = lazy(() => import('./components/home/SafetySection'));
+
+const UploadPanel = lazy(() => import('./components/investigation/UploadPanel'));
+const AnalysisProgress = lazy(() => import('./components/investigation/AnalysisProgress'));
+const ResultView = lazy(() => import('./components/ResultView'));
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -173,49 +175,65 @@ function App() {
     }
   };
 
-  // UploadPanel props
   const uploadProps = {
     file, dragActive, handleDrag, handleDrop, handleChange, handleRemoveFile, handleInspect, fileInputRef
   };
 
   return (
-    <div className="app-layout">
-      <Navbar />
+    <SmoothScroll>
+      <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-slate-900 selection:text-slate-50">
+        <Navbar />
 
-      <main>
-        {error && (
-          <div className="container mt-8">
-            <div className="error-message">
-              <span>{error}</span>
+        <main className="flex-grow flex flex-col relative z-10 pt-20">
+          {error && (
+            <div className="max-w-7xl mx-auto w-full px-6 mt-8">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+                <span className="font-mono text-sm">{error}</span>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {stage === 'HOME' && (
-          <>
-            <Hero>
-              <UploadPanel {...uploadProps} />
-            </Hero>
-            <TrustStrip />
-            <HowItWorks />
-            <EvidencePhilosophy />
-            <EvidenceTrail />
-            <SafetySection />
-          </>
-        )}
+          <AnimatePresence mode="wait">
+            {stage === 'HOME' && (
+              <PageTransition keyProp="home">
+                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-4xl h-96" /></div>}>
+                  <Hero>
+                    <Suspense fallback={<Skeleton className="w-full h-64" />}>
+                      <UploadPanel {...uploadProps} />
+                    </Suspense>
+                  </Hero>
+                  <TrustStrip />
+                  <HowItWorks />
+                  <EvidencePhilosophy />
+                  <EvidenceTrail />
+                  <SafetySection />
+                </Suspense>
+              </PageTransition>
+            )}
 
-        {(stage === 'UPLOADING' || stage === 'PROCESSING') && (
-          <AnalysisProgress currentStage={stage} statusMessage={statusMessage} />
-        )}
+            {(stage === 'UPLOADING' || stage === 'PROCESSING') && (
+              <PageTransition keyProp="processing">
+                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-3xl h-64" /></div>}>
+                  <AnalysisProgress currentStage={stage} statusMessage={statusMessage} />
+                </Suspense>
+              </PageTransition>
+            )}
 
-        {stage === 'RESULT' && (
-          <ResultView result={result} onReset={resetFlow} />
-        )}
-      </main>
+            {stage === 'RESULT' && (
+              <PageTransition keyProp="result">
+                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-6xl h-[80vh]" /></div>}>
+                  <ResultView result={result} onReset={resetFlow} />
+                </Suspense>
+              </PageTransition>
+            )}
+          </AnimatePresence>
+        </main>
 
-      <Footer />
-    </div>
+        <Footer />
+      </div>
+    </SmoothScroll>
   );
 }
 
 export default App;
+
