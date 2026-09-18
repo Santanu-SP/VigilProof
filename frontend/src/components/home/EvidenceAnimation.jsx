@@ -50,7 +50,7 @@ export default function EvidenceAnimation() {
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0 }}
-              className={`mb-2 ${line.includes('[ALERT]') ? 'text-red-400 font-bold' : line.includes('[WARN]') ? 'text-amber-400' : 'text-slate-300'}`}
+              className={`mb-2 ${line?.includes('[ALERT]') ? 'text-red-400 font-bold' : line?.includes('[WARN]') ? 'text-amber-400' : 'text-slate-300'}`}
             >
               {line}
             </motion.div>
