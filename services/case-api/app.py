@@ -60,22 +60,22 @@ def _invoke_ai_extractor(case_id: str):
         raise RuntimeError("AI_EXTRACTOR_FUNCTION_NAME is not configured")
 
     image_s3_uri = f"s3://{EVIDENCE_BUCKET}/cases/{case_id}/input"
-        
+
     response = lambda_client.invoke(
         FunctionName=AI_EXTRACTOR_FUNCTION_NAME,
         InvocationType='RequestResponse',
         Payload=json.dumps({"caseId": case_id, "imageS3Uri": image_s3_uri})
     )
-    
+
     if 'FunctionError' in response:
         # Avoid logging raw payload if it might contain secrets, but for debugging extractor errors:
         logger.error("Extractor FunctionError occurred")
         raise RuntimeError("AI Extractor failed with FunctionError")
-        
+
     payload_bytes = response['Payload'].read()
     if not payload_bytes:
         raise ValueError("Empty response from AI Extractor")
-        
+
     try:
         envelope = json.loads(payload_bytes.decode('utf-8'))
     except json.JSONDecodeError:
@@ -93,7 +93,7 @@ def _invoke_ai_extractor(case_id: str):
     payload = body.get("evidence")
     if not isinstance(payload, dict):
         raise ValueError("AI Extractor response is missing evidence")
-        
+
     # Validate structure against Evidence contract
     required_keys = [
         "messageText", "claimedOrganization", "urls", "phoneNumbers", "upiIds", "amounts",
@@ -103,7 +103,7 @@ def _invoke_ai_extractor(case_id: str):
     for key in required_keys:
         if key not in payload:
             raise ValueError(f"Missing required field in extractor response: {key}")
-            
+
     return payload
 
 def create_case_handler(event, context):
@@ -111,7 +111,7 @@ def create_case_handler(event, context):
         case_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
         expire_at = int((now + timedelta(days=7)).timestamp())
-        
+
         table = dynamodb.Table(CASES_TABLE)
         table.put_item(
             Item={
@@ -121,7 +121,7 @@ def create_case_handler(event, context):
                 'expireAt': expire_at
             }
         )
-        
+
         object_key = f"cases/{case_id}/input"
         upload_url = s3_client.generate_presigned_url(
             'put_object',
@@ -132,14 +132,14 @@ def create_case_handler(event, context):
             },
             ExpiresIn=3600 # 1 hour
         )
-        
+
         return _build_response(201, {
             "caseId": case_id,
             "status": "CREATED",
             "uploadUrl": upload_url,
             "objectKey": object_key
         })
-        
+
     except ClientError as e:
         logger.error(f"AWS Error in create_case: {e}")
         return _build_response(500, {"error": "Internal Server Error"})
@@ -151,21 +151,21 @@ def analyze_case_handler(event, context):
     try:
         path_parameters = event.get('pathParameters') or {}
         case_id = path_parameters.get('caseId')
-        
+
         if not case_id or not _validate_uuid(case_id):
             return _build_response(400, {"error": "Invalid caseId"})
-            
+
         table = dynamodb.Table(CASES_TABLE)
         response = table.get_item(Key={'caseId': case_id})
-        
+
         if 'Item' not in response:
             return _build_response(404, {"error": "Case not found"})
-            
+
         item = response['Item']
-        
+
         if item.get('status') in ['PROCESSING', 'COMPLETED']:
             return _build_response(409, {"error": "Case is already processing or completed"})
-            
+
         # Ensure the expected S3 object reference exists
         object_key = f"cases/{case_id}/input"
         try:
@@ -174,7 +174,7 @@ def analyze_case_handler(event, context):
             if e.response['Error']['Code'] == '404':
                 return _build_response(400, {"error": "Evidence not uploaded yet"})
             raise
-            
+
         # Update status to PROCESSING
         table.update_item(
             Key={'caseId': case_id},
@@ -182,30 +182,30 @@ def analyze_case_handler(event, context):
             ExpressionAttributeNames={'#s': 'status'},
             ExpressionAttributeValues={':s': 'PROCESSING'}
         )
-        
+
         try:
             # Invoke adapter
             evidence = _invoke_ai_extractor(case_id)
-            
+
             # Risk engine hook
             risk = _invoke_risk_engine(evidence)
-            
+
             update_expr = "SET #s = :s, #e = :e"
             expr_names = {'#s': 'status', '#e': 'evidence'}
             expr_vals = {':s': 'COMPLETED', ':e': evidence}
-            
+
             if risk is not None:
                 update_expr += ", #r = :r"
                 expr_names['#r'] = 'risk'
                 expr_vals[':r'] = risk
-            
+
             table.update_item(
                 Key={'caseId': case_id},
                 UpdateExpression=update_expr,
                 ExpressionAttributeNames=expr_names,
                 ExpressionAttributeValues=expr_vals
             )
-            
+
             return _build_response(200, {
                 "caseId": case_id,
                 "status": "COMPLETED",
@@ -213,7 +213,7 @@ def analyze_case_handler(event, context):
                 "risk": risk,
                 "error": None
             })
-            
+
         except Exception as extractor_err:
             logger.error("Analysis failed: %s", type(extractor_err).__name__)
             # Transition to FAILED
@@ -224,7 +224,7 @@ def analyze_case_handler(event, context):
                 ExpressionAttributeValues={':s': 'FAILED', ':err': "Analysis failed due to internal error"}
             )
             return _build_response(500, {"error": "Analysis failed"})
-        
+
     except ClientError as e:
         logger.error(f"AWS Error in analyze_case: {e}")
         return _build_response(500, {"error": "Internal Server Error"})
@@ -236,18 +236,18 @@ def get_case_handler(event, context):
     try:
         path_parameters = event.get('pathParameters') or {}
         case_id = path_parameters.get('caseId')
-        
+
         if not case_id or not _validate_uuid(case_id):
             return _build_response(400, {"error": "Invalid caseId"})
-            
+
         table = dynamodb.Table(CASES_TABLE)
         response = table.get_item(Key={'caseId': case_id})
-        
+
         if 'Item' not in response:
             return _build_response(404, {"error": "Case not found"})
-            
+
         item = response['Item']
-        
+
         # Default shape as per contract
         body = {
             "caseId": item.get('caseId'),
@@ -273,9 +273,9 @@ def get_case_handler(event, context):
             }),
             "error": item.get('error')
         }
-        
+
         return _build_response(200, body)
-        
+
     except ClientError as e:
         logger.error(f"AWS Error in get_case: {e}")
         return _build_response(500, {"error": "Internal Server Error"})

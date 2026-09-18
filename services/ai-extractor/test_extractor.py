@@ -37,7 +37,7 @@ def test_extract_evidence_success(mock_bedrock, mock_s3):
     }
 
     evidence = extract_evidence("s3://test-bucket/test-key.jpg")
-    
+
     assert evidence.messageText == "Dear user, pay us immediately."
     assert evidence.urls == ["http://scam.com"]
     assert evidence.asksForPayment is True
@@ -177,10 +177,10 @@ def test_bedrock_error(mock_bedrock, mock_s3):
 def test_handler_success():
     with patch('extractor.extract_evidence') as mock_extract:
         mock_extract.return_value = Evidence(messageText="Test", urls=[])
-        
+
         event = {"caseId": "123", "imageS3Uri": "s3://bucket/img.png"}
         result = handler(event, None)
-        
+
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["caseId"] == "123"
@@ -189,7 +189,7 @@ def test_handler_success():
 def test_handler_missing_uri():
     event = {"caseId": "123"}
     result = handler(event, None)
-    
+
     assert result["statusCode"] == 400
     body = json.loads(result["body"])
     assert "error" in body

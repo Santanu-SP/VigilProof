@@ -85,11 +85,11 @@ def get_s3_client():
 def _download_image_bytes(s3_uri: str) -> Tuple[bytes, str]:
     if not s3_uri or not s3_uri.startswith("s3://"):
         raise ExtractionError(f"Invalid imageS3Uri: {s3_uri}")
-    
+
     parts = s3_uri[5:].split("/", 1)
     if len(parts) != 2:
         raise ExtractionError(f"Malformed imageS3Uri: {s3_uri}")
-    
+
     bucket, key = parts
     s3 = get_s3_client()
     try:
@@ -110,9 +110,9 @@ def _download_image_bytes(s3_uri: str) -> Tuple[bytes, str]:
 def parse_model_response(content: list) -> Evidence:
     if not content:
         raise ExtractionError("Empty model response")
-        
+
     extracted_data = None
-    
+
     for block in content:
         if "toolUse" in block:
             tool_use = block["toolUse"]
@@ -123,14 +123,14 @@ def parse_model_response(content: list) -> Evidence:
             text = block["text"].strip()
             if not text:
                 continue
-            
+
             # Try plain JSON
             try:
                 extracted_data = json.loads(text)
                 break
             except json.JSONDecodeError:
                 pass
-            
+
             # Try fenced JSON
             match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
             if match:
@@ -139,7 +139,7 @@ def parse_model_response(content: list) -> Evidence:
                     break
                 except json.JSONDecodeError:
                     pass
-            
+
             # Try finding { }
             start = text.find('{')
             end = text.rfind('}')
@@ -152,16 +152,16 @@ def parse_model_response(content: list) -> Evidence:
 
     if extracted_data is None:
         raise ExtractionError("Could not extract valid JSON from model response.")
-    
+
     if isinstance(extracted_data, str):
         try:
             extracted_data = json.loads(extracted_data)
         except json.JSONDecodeError:
             raise ExtractionError("Extracted data is a string, not valid JSON object.")
-            
+
     if not isinstance(extracted_data, dict):
         raise ExtractionError(f"Extracted data is not a JSON object: {type(extracted_data)}")
-        
+
     try:
         return Evidence(**extracted_data)
     except ValidationError as e:
@@ -263,12 +263,12 @@ def handler(event, context):
     try:
         case_id = event.get("caseId")
         image_s3_uri = event.get("imageS3Uri")
-        
+
         if not image_s3_uri:
             raise ExtractionError("Missing imageS3Uri in event")
-            
+
         evidence = extract_evidence(image_s3_uri)
-        
+
         return {
             "statusCode": 200,
             "body": json.dumps({
