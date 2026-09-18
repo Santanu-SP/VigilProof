@@ -1,0 +1,78 @@
+.risk-summary-card {
+  border-radius: 12px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  border-width: 1px;
+  border-style: solid;
+}
+
+.risk-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.risk-title-area {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.risk-label {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.risk-score-area {
+  display: flex;
+  align-items: baseline;
+}
+
+.score-value {
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.score-max {
+  font-size: 1.25rem;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.risk-disclaimer {
+  max-width: 80%;
+  opacity: 0.9;
+}
+
+/* HIGH RISK */
+.risk-high {
+  background-color: var(--color-red-50);
+  border-color: var(--color-red-200);
+  color: var(--color-red-900);
+}
+.risk-high .risk-icon, .risk-high .score-value {
+  color: var(--color-red-600);
+}
+
+/* MEDIUM RISK */
+.risk-medium {
+  background-color: var(--color-amber-50);
+  border-color: var(--color-amber-200);
+  color: var(--color-amber-900);
+}
+.risk-medium .risk-icon, .risk-medium .score-value {
+  color: var(--color-amber-600);
+}
+
+/* LOW RISK */
+.risk-low {
+  background-color: var(--color-green-50);
+  border-color: var(--color-green-200);
+  color: var(--color-green-900);
+}
+.risk-low .risk-icon, .risk-low .score-value {
+  color: var(--color-green-600);
+}
