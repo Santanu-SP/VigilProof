@@ -1,7 +1,26 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, FileImage, X, ShieldAlert, Loader2, Search, CheckCircle2 } from 'lucide-react';
-import ResultView from './components/ResultView';
+import React, { useState, useRef, useEffect, Suspense, lazy } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { createCase, uploadEvidence, startAnalysis, getCase } from './services/api';
+
+import Navbar from './components/layout/Navbar';
+import Footer from './components/layout/Footer';
+import { SmoothScroll } from './components/layout/SmoothScroll';
+import { PageTransition } from './components/layout/PageTransition';
+import { Skeleton } from './components/ui/Skeleton';
+
+import './App.css';
+
+// Lazy loaded sections
+const Hero = lazy(() => import('./components/home/Hero'));
+const TrustStrip = lazy(() => import('./components/home/TrustStrip'));
+const HowItWorks = lazy(() => import('./components/home/HowItWorks'));
+const EvidencePhilosophy = lazy(() => import('./components/home/EvidencePhilosophy'));
+const EvidenceTrail = lazy(() => import('./components/home/EvidenceTrail'));
+const SafetySection = lazy(() => import('./components/home/SafetySection'));
+
+const UploadPanel = lazy(() => import('./components/investigation/UploadPanel'));
+const AnalysisProgress = lazy(() => import('./components/investigation/AnalysisProgress'));
+const ResultView = lazy(() => import('./components/ResultView'));
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -98,11 +117,11 @@ function App() {
           setError('Analysis failed. The message could not be processed.');
           setStage('HOME');
         } else if (caseData.status === 'extracting_evidence') {
-          setStatusMessage('Extracting visible evidence...');
+          setStatusMessage('extracting_evidence');
         } else if (caseData.status === 'checking_indicators') {
-          setStatusMessage('Checking indicators...');
+          setStatusMessage('checking_indicators');
         } else if (caseData.status === 'preparing_result') {
-          setStatusMessage('Preparing result...');
+          setStatusMessage('preparing_result');
         } else {
           setStatusMessage('Reading screenshot...');
         }
@@ -124,7 +143,7 @@ function App() {
     try {
       setError(null);
       setStage('UPLOADING');
-      setStatusMessage('Evidence uploaded');
+      setStatusMessage('UPLOADING');
 
       // 1. Create Case
       const { caseId, uploadUrl } = await createCase();
@@ -134,7 +153,7 @@ function App() {
 
       // 3. Start Analysis
       setStage('PROCESSING');
-      setStatusMessage('Reading screenshot...');
+      setStatusMessage('extracting_evidence');
       await startAnalysis(caseId);
 
       // 4. Poll for result
@@ -156,94 +175,65 @@ function App() {
     }
   };
 
+  const uploadProps = {
+    file, dragActive, handleDrag, handleDrop, handleChange, handleRemoveFile, handleInspect, fileInputRef
+  };
+
   return (
-    <div className="container">
-      <header>
-        <h1>VigilProof</h1>
-        <p className="subtitle">Inspect suspicious messages before you trust them.</p>
-      </header>
+    <SmoothScroll>
+      <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-slate-900 selection:text-slate-50">
+        <Navbar />
 
-      {error && (
-        <div className="error-message">
-          <ShieldAlert size={20} />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {stage === 'HOME' && (
-        <div className="card">
-          {!file ? (
-            <div 
-              className={`upload-area ${dragActive ? 'drag-active' : ''}`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              tabIndex={0}
-              role="button"
-              aria-label="Upload screenshot"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  fileInputRef.current?.click();
-                }
-              }}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleChange}
-              />
-              <UploadCloud className="upload-icon" size={48} />
-              <div className="upload-text">Select suspicious screenshot</div>
-              <div className="upload-hint">or drag and drop it here</div>
-            </div>
-          ) : (
-            <div className="file-preview">
-              <div className="file-info">
-                <FileImage size={24} color="var(--primary-color)" />
-                <span className="file-name">{file.name}</span>
+        <main className="flex-grow flex flex-col relative z-10 pt-20">
+          {error && (
+            <div className="max-w-7xl mx-auto w-full px-6 mt-8">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+                <span className="font-mono text-sm">{error}</span>
               </div>
-              <button 
-                className="remove-btn" 
-                onClick={handleRemoveFile}
-                aria-label="Remove file"
-              >
-                <X size={20} />
-              </button>
             </div>
           )}
 
-          <button 
-            className="btn-primary" 
-            onClick={handleInspect} 
-            disabled={!file || stage !== 'HOME'}
-          >
-            <Search size={20} />
-            Inspect safely
-          </button>
-        </div>
-      )}
+          <AnimatePresence mode="wait">
+            {stage === 'HOME' && (
+              <PageTransition keyProp="home">
+                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-4xl h-96" /></div>}>
+                  <Hero>
+                    <Suspense fallback={<Skeleton className="w-full h-64" />}>
+                      <UploadPanel {...uploadProps} />
+                    </Suspense>
+                  </Hero>
+                  <TrustStrip />
+                  <HowItWorks />
+                  <EvidencePhilosophy />
+                  <EvidenceTrail />
+                  <SafetySection />
+                </Suspense>
+              </PageTransition>
+            )}
 
-      {(stage === 'UPLOADING' || stage === 'PROCESSING') && (
-        <div className="card status-view">
-          {stage === 'UPLOADING' ? (
-            <UploadCloud className="status-icon" size={64} />
-          ) : (
-            <Loader2 className="status-icon" size={64} />
-          )}
-          <div className="status-text">{statusMessage}</div>
-          <div className="status-subtext">Please wait while we verify this message.</div>
-        </div>
-      )}
+            {(stage === 'UPLOADING' || stage === 'PROCESSING') && (
+              <PageTransition keyProp="processing">
+                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-3xl h-64" /></div>}>
+                  <AnalysisProgress currentStage={stage} statusMessage={statusMessage} />
+                </Suspense>
+              </PageTransition>
+            )}
 
-      {stage === 'RESULT' && (
-        <ResultView result={result} onReset={resetFlow} />
-      )}
-    </div>
+            {stage === 'RESULT' && (
+              <PageTransition keyProp="result">
+                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-6xl h-[80vh]" /></div>}>
+                  <ResultView result={result} onReset={resetFlow} />
+                </Suspense>
+              </PageTransition>
+            )}
+          </AnimatePresence>
+        </main>
+
+        <Footer />
+      </div>
+    </SmoothScroll>
   );
 }
 
 export default App;
+
