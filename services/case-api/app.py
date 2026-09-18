@@ -44,25 +44,65 @@ def _validate_uuid(val):
     except ValueError:
         return False
 
+def _invoke_risk_engine(evidence, case_id):
+    """
+    Adapter boundary for Santanu's deterministic risk engine.
+    To be wired up during integration.
+    """
+    return None
+
 def _invoke_ai_extractor(case_id: str):
     """
     Adapter boundary for Shubham's future AI extractor.
-    Currently a development stub.
     """
     if not AI_EXTRACTOR_FUNCTION_NAME or AI_EXTRACTOR_FUNCTION_NAME == "STUB":
         logger.info(f"STUB: Triggering AI extractor for case {case_id}")
-        return
+        return {
+            "messageText": "Stub response",
+            "claimedOrganization": None,
+            "urls": [],
+            "phoneNumbers": [],
+            "upiIds": [],
+            "amounts": [],
+            "asksForPayment": False,
+            "asksForOtp": False,
+            "asksForPassword": False,
+            "threatLanguage": [],
+            "urgencyLanguage": []
+        }
+        
+    response = lambda_client.invoke(
+        FunctionName=AI_EXTRACTOR_FUNCTION_NAME,
+        InvocationType='RequestResponse',
+        Payload=json.dumps({"caseId": case_id})
+    )
+    
+    if 'FunctionError' in response:
+        # Avoid logging raw payload if it might contain secrets, but for debugging extractor errors:
+        logger.error("Extractor FunctionError occurred")
+        raise RuntimeError("AI Extractor failed with FunctionError")
+        
+    payload_bytes = response['Payload'].read()
+    if not payload_bytes:
+        raise ValueError("Empty response from AI Extractor")
         
     try:
-        lambda_client.invoke(
-            FunctionName=AI_EXTRACTOR_FUNCTION_NAME,
-            InvocationType='Event',
-            Payload=json.dumps({"caseId": case_id})
-        )
-    except ClientError as e:
-        logger.error(f"Failed to invoke AI extractor: {e}")
-        # Not throwing to allow state transition to complete, 
-        # but in production we might handle this with a DLQ or retry
+        payload = json.loads(payload_bytes.decode('utf-8'))
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON from AI Extractor: {e}")
+        raise ValueError("Invalid JSON from AI Extractor")
+        
+    # Validate structure against Evidence contract
+    required_keys = [
+        "messageText", "urls", "phoneNumbers", "upiIds", "amounts",
+        "asksForPayment", "asksForOtp", "asksForPassword",
+        "threatLanguage", "urgencyLanguage"
+    ]
+    for key in required_keys:
+        if key not in payload:
+            raise ValueError(f"Missing required field in extractor response: {key}")
+            
+    return payload
 
 def create_case_handler(event, context):
     try:
@@ -119,6 +159,20 @@ def analyze_case_handler(event, context):
         if 'Item' not in response:
             return _build_response(404, {"error": "Case not found"})
             
+        item = response['Item']
+        
+        if item.get('status') in ['PROCESSING', 'COMPLETED']:
+            return _build_response(409, {"error": "Case is already processing or completed"})
+            
+        # Ensure the expected S3 object reference exists
+        object_key = f"cases/{case_id}/input"
+        try:
+            s3_client.head_object(Bucket=EVIDENCE_BUCKET, Key=object_key)
+        except ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                return _build_response(400, {"error": "Evidence not uploaded yet"})
+            raise
+            
         # Update status to PROCESSING
         table.update_item(
             Key={'caseId': case_id},
@@ -127,13 +181,47 @@ def analyze_case_handler(event, context):
             ExpressionAttributeValues={':s': 'PROCESSING'}
         )
         
-        # Invoke adapter
-        _invoke_ai_extractor(case_id)
-        
-        return _build_response(200, {
-            "caseId": case_id,
-            "status": "PROCESSING"
-        })
+        try:
+            # Invoke adapter
+            evidence = _invoke_ai_extractor(case_id)
+            
+            # Risk engine hook
+            risk = _invoke_risk_engine(evidence, case_id)
+            
+            update_expr = "SET #s = :s, #e = :e"
+            expr_names = {'#s': 'status', '#e': 'evidence'}
+            expr_vals = {':s': 'COMPLETED', ':e': evidence}
+            
+            if risk is not None:
+                update_expr += ", #r = :r"
+                expr_names['#r'] = 'risk'
+                expr_vals[':r'] = risk
+            
+            table.update_item(
+                Key={'caseId': case_id},
+                UpdateExpression=update_expr,
+                ExpressionAttributeNames=expr_names,
+                ExpressionAttributeValues=expr_vals
+            )
+            
+            return _build_response(200, {
+                "caseId": case_id,
+                "status": "COMPLETED",
+                "evidence": evidence,
+                "risk": risk,
+                "error": None
+            })
+            
+        except Exception as extractor_err:
+            logger.error(f"Extractor failed: {extractor_err}")
+            # Transition to FAILED
+            table.update_item(
+                Key={'caseId': case_id},
+                UpdateExpression="SET #s = :s, #err = :err",
+                ExpressionAttributeNames={'#s': 'status', '#err': 'error'},
+                ExpressionAttributeValues={':s': 'FAILED', ':err': "Analysis failed due to internal error"}
+            )
+            return _build_response(500, {"error": "Analysis failed"})
         
     except ClientError as e:
         logger.error(f"AWS Error in analyze_case: {e}")
