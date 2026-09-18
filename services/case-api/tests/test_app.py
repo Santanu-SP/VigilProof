@@ -21,6 +21,13 @@ from app import (
     analyze_case_handler
 )
 
+
+def lambda_response(evidence, status_code=200):
+    body = {"caseId": "extractor-case", "evidence": evidence}
+    stream = MagicMock()
+    stream.read.return_value = json.dumps({"statusCode": status_code, "body": json.dumps(body)}).encode('utf-8')
+    return {'Payload': stream}
+
 @pytest.fixture(scope='function')
 def aws_credentials():
     """Mocked AWS Credentials for moto."""
@@ -120,16 +127,14 @@ def test_successful_analyze_flow(mock_invoke, dynamodb, s3):
         "phoneNumbers": [],
         "upiIds": [],
         "amounts": [],
-        "asksForPayment": False,
-        "asksForOtp": False,
+        "asksForPayment": True,
+        "asksForOtp": True,
         "asksForPassword": False,
         "threatLanguage": [],
         "urgencyLanguage": []
     }
     
-    mock_response_stream = MagicMock()
-    mock_response_stream.read.return_value = json.dumps(mock_payload).encode('utf-8')
-    mock_invoke.return_value = {'Payload': mock_response_stream}
+    mock_invoke.return_value = lambda_response(mock_payload)
     
     analyze_response = analyze_case_handler({'pathParameters': {'caseId': case_id}}, {})
     
@@ -137,12 +142,22 @@ def test_successful_analyze_flow(mock_invoke, dynamodb, s3):
     body = json.loads(analyze_response['body'])
     assert body['status'] == 'COMPLETED'
     assert body['evidence']['messageText'] == 'Hello'
+    assert body['risk']['level'] == 'MODERATE'
+    assert body['risk']['evidenceScore'] == 45
+    assert [signal['code'] for signal in body['risk']['signals']] == ['OTP_REQUEST', 'PAYMENT_REQUEST']
+
+    invocation = json.loads(mock_invoke.call_args.kwargs['Payload'])
+    assert invocation == {
+        "caseId": case_id,
+        "imageS3Uri": f"s3://test-evidence-bucket/cases/{case_id}/input",
+    }
     
     # Verify DB persistence
     table = dynamodb.Table('test-cases-table')
     item = table.get_item(Key={'caseId': case_id})['Item']
     assert item['status'] == 'COMPLETED'
     assert item['evidence']['messageText'] == 'Hello'
+    assert item['risk']['evidenceScore'] == 45
 
 def test_analyze_missing_evidence(dynamodb, s3):
     create_response = create_case_handler({}, {})
@@ -178,9 +193,7 @@ def test_analyze_malformed_extractor_output(mock_invoke, dynamodb, s3):
     
     # Missing fields
     mock_payload = {"messageText": "Hello"}
-    mock_response_stream = MagicMock()
-    mock_response_stream.read.return_value = json.dumps(mock_payload).encode('utf-8')
-    mock_invoke.return_value = {'Payload': mock_response_stream}
+    mock_invoke.return_value = lambda_response(mock_payload)
     
     analyze_response = analyze_case_handler({'pathParameters': {'caseId': case_id}}, {})
     assert analyze_response['statusCode'] == 500
@@ -210,9 +223,7 @@ def test_repeated_analyze(mock_invoke, dynamodb, s3):
         "urgencyLanguage": []
     }
     
-    mock_response_stream = MagicMock()
-    mock_response_stream.read.return_value = json.dumps(mock_payload).encode('utf-8')
-    mock_invoke.return_value = {'Payload': mock_response_stream}
+    mock_invoke.return_value = lambda_response(mock_payload)
     
     # First call
     res1 = analyze_case_handler({'pathParameters': {'caseId': case_id}}, {})

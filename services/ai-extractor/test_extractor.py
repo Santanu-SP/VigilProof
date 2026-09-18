@@ -41,14 +41,14 @@ def test_extract_evidence_success(mock_bedrock, mock_s3):
     assert evidence.messageText == "Dear user, pay us immediately."
     assert evidence.urls == ["http://scam.com"]
     assert evidence.asksForPayment is True
-    assert evidence.claimedOrganization is None
+    assert evidence.claimedOrganization == ""
     assert evidence.phoneNumbers == []
 
 def test_parse_minimal_empty_evidence():
     content = [{"toolUse": {"name": "extract_evidence", "input": {}}}]
     evidence = parse_model_response(content)
     assert evidence.messageText == ""
-    assert evidence.claimedOrganization is None
+    assert evidence.claimedOrganization == ""
     assert evidence.urls == []
     assert evidence.asksForPayment is False
 

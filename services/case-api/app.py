@@ -1,10 +1,18 @@
 import json
 import os
+import sys
 import uuid
 import logging
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 import boto3
 from botocore.exceptions import ClientError
+
+RISK_ENGINE_ROOT = Path(__file__).resolve().parents[1] / 'risk-engine'
+if str(RISK_ENGINE_ROOT) not in sys.path:
+    sys.path.insert(0, str(RISK_ENGINE_ROOT))
+
+from risk_engine import assess_risk
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -44,37 +52,19 @@ def _validate_uuid(val):
     except ValueError:
         return False
 
-def _invoke_risk_engine(evidence, case_id):
-    """
-    Adapter boundary for Santanu's deterministic risk engine.
-    To be wired up during integration.
-    """
-    return None
+def _invoke_risk_engine(evidence):
+    return assess_risk({"evidence": evidence})
 
 def _invoke_ai_extractor(case_id: str):
-    """
-    Adapter boundary for Shubham's future AI extractor.
-    """
     if not AI_EXTRACTOR_FUNCTION_NAME or AI_EXTRACTOR_FUNCTION_NAME == "STUB":
-        logger.info(f"STUB: Triggering AI extractor for case {case_id}")
-        return {
-            "messageText": "Stub response",
-            "claimedOrganization": None,
-            "urls": [],
-            "phoneNumbers": [],
-            "upiIds": [],
-            "amounts": [],
-            "asksForPayment": False,
-            "asksForOtp": False,
-            "asksForPassword": False,
-            "threatLanguage": [],
-            "urgencyLanguage": []
-        }
+        raise RuntimeError("AI_EXTRACTOR_FUNCTION_NAME is not configured")
+
+    image_s3_uri = f"s3://{EVIDENCE_BUCKET}/cases/{case_id}/input"
         
     response = lambda_client.invoke(
         FunctionName=AI_EXTRACTOR_FUNCTION_NAME,
         InvocationType='RequestResponse',
-        Payload=json.dumps({"caseId": case_id})
+        Payload=json.dumps({"caseId": case_id, "imageS3Uri": image_s3_uri})
     )
     
     if 'FunctionError' in response:
@@ -87,14 +77,26 @@ def _invoke_ai_extractor(case_id: str):
         raise ValueError("Empty response from AI Extractor")
         
     try:
-        payload = json.loads(payload_bytes.decode('utf-8'))
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON from AI Extractor: {e}")
+        envelope = json.loads(payload_bytes.decode('utf-8'))
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON from AI Extractor")
         raise ValueError("Invalid JSON from AI Extractor")
+
+    if envelope.get("statusCode") != 200:
+        raise RuntimeError("AI Extractor returned an unsuccessful response")
+
+    try:
+        body = json.loads(envelope.get("body", ""))
+    except (TypeError, json.JSONDecodeError):
+        raise ValueError("Invalid response body from AI Extractor")
+
+    payload = body.get("evidence")
+    if not isinstance(payload, dict):
+        raise ValueError("AI Extractor response is missing evidence")
         
     # Validate structure against Evidence contract
     required_keys = [
-        "messageText", "urls", "phoneNumbers", "upiIds", "amounts",
+        "messageText", "claimedOrganization", "urls", "phoneNumbers", "upiIds", "amounts",
         "asksForPayment", "asksForOtp", "asksForPassword",
         "threatLanguage", "urgencyLanguage"
     ]
@@ -186,7 +188,7 @@ def analyze_case_handler(event, context):
             evidence = _invoke_ai_extractor(case_id)
             
             # Risk engine hook
-            risk = _invoke_risk_engine(evidence, case_id)
+            risk = _invoke_risk_engine(evidence)
             
             update_expr = "SET #s = :s, #e = :e"
             expr_names = {'#s': 'status', '#e': 'evidence'}
@@ -213,7 +215,7 @@ def analyze_case_handler(event, context):
             })
             
         except Exception as extractor_err:
-            logger.error(f"Extractor failed: {extractor_err}")
+            logger.error("Analysis failed: %s", type(extractor_err).__name__)
             # Transition to FAILED
             table.update_item(
                 Key={'caseId': case_id},
