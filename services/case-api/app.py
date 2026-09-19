@@ -151,7 +151,6 @@ def create_case_handler(event, context):
             Params={
                 'Bucket': EVIDENCE_BUCKET,
                 'Key': object_key,
-                'ContentType': 'application/octet-stream' # generic fallback
             },
             ExpiresIn=3600 # 1 hour
         )

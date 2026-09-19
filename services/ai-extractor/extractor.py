@@ -95,14 +95,18 @@ def _download_image_bytes(s3_uri: str) -> Tuple[bytes, str]:
     try:
         response = s3.get_object(Bucket=bucket, Key=key)
         image_bytes = response['Body'].read()
-        content_type = response.get('ContentType', 'image/jpeg')
+        content_type = response.get('ContentType', '').split(';', 1)[0].strip().lower()
         format_map = {
             'image/png': 'png',
             'image/jpeg': 'jpeg',
             'image/webp': 'webp',
             'image/gif': 'gif'
         }
-        fmt = format_map.get(content_type, 'jpeg')
+        if not image_bytes:
+            raise ExtractionError("Image object is empty")
+        fmt = format_map.get(content_type)
+        if not fmt:
+            raise ExtractionError(f"Unsupported image content type: {content_type or 'missing'}")
         return image_bytes, fmt
     except (ClientError, BotoCoreError) as e:
         raise ExtractionError(f"Failed to fetch image from S3: {str(e)}")

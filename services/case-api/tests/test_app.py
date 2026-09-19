@@ -101,6 +101,17 @@ def test_create_case(dynamodb, s3):
     assert 'createdAt' in item
     assert 'expireAt' in item
 
+
+@patch('app.s3_client.generate_presigned_url')
+def test_create_case_does_not_pin_upload_content_type(mock_presign, dynamodb):
+    mock_presign.return_value = 'https://example.invalid/upload'
+
+    response = create_case_handler(auth_event(), {})
+
+    assert response['statusCode'] == 201
+    params = mock_presign.call_args.kwargs['Params']
+    assert set(params) == {'Bucket', 'Key'}
+
 def test_get_existing_case(dynamodb, s3):
     create_response = create_case_handler(auth_event(sub="owner-sub"), {})
     case_id = json.loads(create_response['body'])['caseId']

@@ -177,6 +177,28 @@ def test_s3_inaccessible(mock_s3):
     with pytest.raises(ExtractionError, match="Failed to fetch image from S3"):
         extract_evidence("s3://test-bucket/test-key.jpg")
 
+
+@patch('extractor.get_s3_client')
+def test_rejects_empty_image(mock_s3):
+    mock_s3.return_value.get_object.return_value = {
+        'Body': MagicMock(read=lambda: b''),
+        'ContentType': 'image/jpeg',
+    }
+
+    with pytest.raises(ExtractionError, match="Image object is empty"):
+        extract_evidence("s3://test-bucket/test-key.jpg")
+
+
+@patch('extractor.get_s3_client')
+def test_rejects_unsupported_image_content_type(mock_s3):
+    mock_s3.return_value.get_object.return_value = {
+        'Body': MagicMock(read=lambda: b'not-an-image'),
+        'ContentType': 'application/pdf',
+    }
+
+    with pytest.raises(ExtractionError, match="Unsupported image content type"):
+        extract_evidence("s3://test-bucket/test-key.jpg")
+
 @patch('extractor.get_s3_client')
 @patch('extractor.get_bedrock_client')
 def test_bedrock_error(mock_bedrock, mock_s3):
