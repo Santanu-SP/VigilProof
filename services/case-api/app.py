@@ -20,6 +20,11 @@ class UnauthorizedError(Exception):
 class ForbiddenError(Exception):
     pass
 
+class ProviderError(Exception):
+    def __init__(self, code, message):
+        self.code = code
+        super().__init__(message)
+
 def get_authenticated_user(event):
     try:
         sub = event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {}).get('sub')
@@ -42,19 +47,15 @@ AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 EVIDENCE_BUCKET = os.environ.get('EVIDENCE_BUCKET')
 CASES_TABLE = os.environ.get('CASES_TABLE')
 AI_EXTRACTOR_FUNCTION_NAME = os.environ.get('AI_EXTRACTOR_FUNCTION_NAME')
-BEDROCK_ENABLED = os.environ.get('BEDROCK_ENABLED', 'false').lower() == 'true'
+AI_ENABLED = os.environ.get('AI_ENABLED', 'true').lower() == 'true'
 
 if not EVIDENCE_BUCKET or not CASES_TABLE:
     logger.warning("Missing required environment variables (EVIDENCE_BUCKET, CASES_TABLE)")
 
 
-# Initialize clients globally for execution environment reuse
-try:
-    dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
-    s3_client = boto3.client('s3', region_name=AWS_REGION)
-    lambda_client = boto3.client('lambda', region_name=AWS_REGION)
-except Exception as e:
-    logger.error(f"Failed to initialize AWS clients: {e}")
+dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
+s3_client = boto3.client('s3', region_name=AWS_REGION)
+lambda_client = boto3.client('lambda', region_name=AWS_REGION)
 
 
 def _build_response(status_code, body):
@@ -93,7 +94,6 @@ def _invoke_ai_extractor(case_id: str):
     )
 
     if 'FunctionError' in response:
-        # Avoid logging raw payload if it might contain secrets, but for debugging extractor errors:
         logger.error("Extractor FunctionError occurred")
         raise RuntimeError("AI Extractor failed with FunctionError")
 
@@ -107,19 +107,18 @@ def _invoke_ai_extractor(case_id: str):
         logger.error("Invalid JSON from AI Extractor")
         raise ValueError("Invalid JSON from AI Extractor")
 
-    if envelope.get("statusCode") != 200:
-        raise RuntimeError("AI Extractor returned an unsuccessful response")
-
     try:
         body = json.loads(envelope.get("body", ""))
     except (TypeError, json.JSONDecodeError):
         raise ValueError("Invalid response body from AI Extractor")
 
+    if envelope.get("statusCode") != 200:
+        raise ProviderError(body.get("code", "AI_PROVIDER_UNAVAILABLE"), body.get("error", "Evidence analysis is temporarily unavailable."))
+
     payload = body.get("evidence")
     if not isinstance(payload, dict):
         raise ValueError("AI Extractor response is missing evidence")
 
-    # Validate structure against Evidence contract
     required_keys = [
         "messageText", "claimedOrganization", "urls", "phoneNumbers", "upiIds", "amounts",
         "asksForPayment", "asksForOtp", "asksForPassword",
@@ -170,11 +169,11 @@ def create_case_handler(event, context):
     except UnauthorizedError as e:
         logger.warning("Unauthorized create request: %s", e)
         return _build_response(401, {"error": "Unauthorized"})
-    except ClientError as e:
-        logger.error(f"AWS Error in create_case: {e}")
+    except ClientError:
+        logger.error("AWS error while creating a case")
         return _build_response(500, {"error": "Internal Server Error"})
-    except Exception as e:
-        logger.error(f"Unexpected error in create_case: {e}")
+    except Exception as error:
+        logger.error("Unexpected create-case error: %s", type(error).__name__)
         return _build_response(500, {"error": "Internal Server Error"})
 
 def analyze_case_handler(event, context):
@@ -207,7 +206,7 @@ def analyze_case_handler(event, context):
                 return _build_response(400, {"error": "Evidence not uploaded yet"})
             raise
 
-        if not BEDROCK_ENABLED:
+        if not AI_ENABLED:
             return _build_response(503, {
                 "code": "AI_PROVIDER_UNAVAILABLE",
                 "error": "Evidence analysis is temporarily unavailable.",
@@ -245,6 +244,15 @@ def analyze_case_handler(event, context):
                 "risk": risk,
                 "error": None,
             })
+        except ProviderError as extractor_err:
+            logger.warning("Analysis provider failure: %s", extractor_err.code)
+            table.update_item(
+                Key={'caseId': case_id},
+                UpdateExpression="SET #s = :s, #err = :err",
+                ExpressionAttributeNames={'#s': 'status', '#err': 'error'},
+                ExpressionAttributeValues={':s': 'FAILED', ':err': str(extractor_err)},
+            )
+            return _build_response(503, {"code": extractor_err.code, "error": str(extractor_err)})
         except Exception as extractor_err:
             logger.error("Analysis failed: %s", type(extractor_err).__name__)
             table.update_item(
@@ -260,11 +268,11 @@ def analyze_case_handler(event, context):
     except ForbiddenError as e:
         logger.warning("Forbidden analyze request: %s", e)
         return _build_response(403, {"error": "Forbidden"})
-    except ClientError as e:
-        logger.error(f"AWS Error in analyze_case: {e}")
+    except ClientError:
+        logger.error("AWS error while analyzing a case")
         return _build_response(500, {"error": "Internal Server Error"})
-    except Exception as e:
-        logger.error(f"Unexpected error in analyze_case: {e}")
+    except Exception as error:
+        logger.error("Unexpected analyze-case error: %s", type(error).__name__)
         return _build_response(500, {"error": "Internal Server Error"})
 
 def get_case_handler(event, context):
@@ -286,7 +294,6 @@ def get_case_handler(event, context):
         item = response['Item']
         _require_case_owner(item, owner_sub)
 
-        # Default shape as per contract
         body = {
             "caseId": item.get('caseId'),
             "status": item.get('status', 'CREATED'),
@@ -320,9 +327,9 @@ def get_case_handler(event, context):
     except ForbiddenError as e:
         logger.warning("Forbidden get request: %s", e)
         return _build_response(403, {"error": "Forbidden"})
-    except ClientError as e:
-        logger.error(f"AWS Error in get_case: {e}")
+    except ClientError:
+        logger.error("AWS error while loading a case")
         return _build_response(500, {"error": "Internal Server Error"})
-    except Exception as e:
-        logger.error(f"Unexpected error in get_case: {e}")
+    except Exception as error:
+        logger.error("Unexpected get-case error: %s", type(error).__name__)
         return _build_response(500, {"error": "Internal Server Error"})

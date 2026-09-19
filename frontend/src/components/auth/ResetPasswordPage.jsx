@@ -105,7 +105,6 @@ export default function ResetPasswordPage() {
                 display: 'flex', alignItems: 'center',
               }}
               aria-label={showPw ? 'Hide password' : 'Show password'}
-              tabIndex={-1}
             >
               {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>

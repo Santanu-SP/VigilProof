@@ -24,8 +24,8 @@ from app import (
 
 
 @pytest.fixture(autouse=True)
-def bedrock_enabled_for_extractor_tests(monkeypatch):
-    monkeypatch.setattr('app.BEDROCK_ENABLED', True)
+def ai_enabled_for_extractor_tests(monkeypatch):
+    monkeypatch.setattr('app.AI_ENABLED', True)
 
 
 def auth_event(sub="test-user", **kwargs):
@@ -232,8 +232,8 @@ def test_analyze_missing_evidence(dynamodb, s3):
     assert body['error'] == 'Evidence not uploaded yet'
 
 
-def test_analysis_is_unavailable_when_bedrock_is_disabled(dynamodb, s3, monkeypatch):
-    monkeypatch.setattr('app.BEDROCK_ENABLED', False)
+def test_analysis_is_unavailable_when_ai_is_disabled(dynamodb, s3, monkeypatch):
+    monkeypatch.setattr('app.AI_ENABLED', False)
     create_response = create_case_handler(auth_event(), {})
     case_id = json.loads(create_response['body'])['caseId']
     s3.put_object(Bucket='test-evidence-bucket', Key=f"cases/{case_id}/input", Body=b'dummy')

@@ -31,14 +31,13 @@ CloudWatch log group, and Lambda execution role:
 
 ```bash
 export AWS_REGION=ap-south-1
-export NOVA_MODEL_ID=global.amazon.nova-2-lite-v1:0
 ./scripts/deploy-day1-infrastructure.sh
 ```
 
 The stack retains evidence, case records, and logs if the stack is deleted. Use
 the CloudFormation outputs for `EVIDENCE_BUCKET` and `CASES_TABLE` in local or
-deployment configuration. Confirm that the selected Nova model is available in
-the target region before deployment.
+deployment configuration. The deployment script expects the Google OAuth values
+from the secure release workflow; it never reads credentials from this repository.
 
 ## URL controls and limitations
 

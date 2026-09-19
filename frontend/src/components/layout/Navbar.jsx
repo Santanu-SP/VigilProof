@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, useScroll, useMotionValueEvent, AnimatePresence } from 'framer-motion';
 import { Shield, User, LogOut } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthProvider';
 
 const NAV_LINKS = [
@@ -16,6 +16,7 @@ export default function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const { scrollY } = useScroll();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { isAuthenticated, user, logout } = useAuth();
 
   useMotionValueEvent(scrollY, 'change', (latest) => {
@@ -153,7 +154,7 @@ export default function Navbar() {
                     fontWeight: 600,
                     color: 'rgba(255,255,255,0.75)',
                     textDecoration: 'none',
-                    borderRadius: '9999px',
+                    borderRadius: '5px',
                     border: '1px solid rgba(255,255,255,0.12)',
                     transition: 'color 0.2s, border-color 0.2s, background 0.2s',
                   }}
@@ -247,7 +248,7 @@ export default function Navbar() {
               </>
             ) : (
               <>
-                <Link
+                {pathname !== '/login' && <Link
                   to="/login"
                   id="navbar-sign-in"
                   style={{
@@ -256,7 +257,7 @@ export default function Navbar() {
                     fontWeight: 600,
                     color: 'rgba(255,255,255,0.75)',
                     textDecoration: 'none',
-                    borderRadius: '9999px',
+                    borderRadius: '5px',
                     border: '1px solid rgba(255,255,255,0.12)',
                     transition: 'color 0.2s, border-color 0.2s, background 0.2s',
                   }}
@@ -272,7 +273,7 @@ export default function Navbar() {
                   }}
                 >
                   Sign In
-                </Link>
+                </Link>}
 
                 <motion.div
                   whileHover={{ scale: 1.04 }}
@@ -288,23 +289,21 @@ export default function Navbar() {
                       fontWeight: 700,
                       color: '#000000',
                       textDecoration: 'none',
-                      borderRadius: '9999px',
-                      background: '#22c55e',
-                      boxShadow: '0 0 16px rgba(34,197,94,0.4)',
-                      transition: 'background 0.2s, box-shadow 0.2s',
+                      borderRadius: '5px',
+                      background: '#77d1c1',
+                      boxShadow: 'none',
+                      transition: 'background 0.2s, transform 0.2s',
                       border: 'none',
                       whiteSpace: 'nowrap',
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.background = '#16a34a';
-                      e.currentTarget.style.boxShadow = '0 0 24px rgba(34,197,94,0.65)';
+                      e.currentTarget.style.background = '#99e1d5';
                     }}
                     onMouseLeave={e => {
-                      e.currentTarget.style.background = '#22c55e';
-                      e.currentTarget.style.boxShadow = '0 0 16px rgba(34,197,94,0.4)';
+                      e.currentTarget.style.background = '#77d1c1';
                     }}
                   >
-                    Get Started
+                    Begin case
                   </Link>
                 </motion.div>
               </>
@@ -400,7 +399,7 @@ export default function Navbar() {
                   onClick={() => setMobileOpen(false)}
                   style={{
                     padding: '14px', textAlign: 'center',
-                    borderRadius: '12px', border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '5px', border: '1px solid rgba(255,255,255,0.2)',
                     color: '#fff', textDecoration: 'none', fontWeight: 600,
                   }}
                 >
@@ -410,7 +409,7 @@ export default function Navbar() {
                   onClick={() => { setMobileOpen(false); logout(); navigate('/'); }}
                   style={{
                     padding: '14px', textAlign: 'center',
-                    borderRadius: '12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                    borderRadius: '5px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
                     color: '#f87171', fontWeight: 600, cursor: 'pointer',
                   }}
                 >
@@ -424,7 +423,7 @@ export default function Navbar() {
                   onClick={() => setMobileOpen(false)}
                   style={{
                     padding: '14px', textAlign: 'center',
-                    borderRadius: '12px', border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '5px', border: '1px solid rgba(255,255,255,0.2)',
                     color: '#fff', textDecoration: 'none', fontWeight: 600,
                   }}
                 >
@@ -435,11 +434,11 @@ export default function Navbar() {
                   onClick={() => setMobileOpen(false)}
                   style={{
                     padding: '14px', textAlign: 'center',
-                    borderRadius: '12px', background: '#22c55e',
+                    borderRadius: '5px', background: '#77d1c1',
                     color: '#000', textDecoration: 'none', fontWeight: 700,
                   }}
                 >
-                  Get Started
+                  Begin case
                 </Link>
               </>
             )}

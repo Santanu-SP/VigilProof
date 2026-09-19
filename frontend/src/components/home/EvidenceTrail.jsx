@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { SectionReveal, RevealItem } from '../ui/SectionReveal';
+import SectionForensicBackdrop from './SectionForensicBackdrop';
 
 export default function EvidenceTrail() {
   const containerRef = useRef(null);
@@ -16,10 +17,13 @@ export default function EvidenceTrail() {
       style={{
         padding: '96px 0',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
-        background: '#09090b',
+        background: 'rgba(7, 12, 14, 0.90)',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px' }}>
+      <SectionForensicBackdrop />
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px', position: 'relative', zIndex: 1 }}>
         <SectionReveal>
           {/* Header */}
           <RevealItem>

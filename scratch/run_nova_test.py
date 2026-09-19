@@ -32,15 +32,15 @@ def create_synthetic_screenshot():
 
 @patch('extractor._download_image_bytes')
 def run_real_test(mock_download):
-    mock_download.return_value = (create_synthetic_screenshot(), "jpeg")
+    mock_download.return_value = (create_synthetic_screenshot(), "image/jpeg")
 
-    print("Running real Nova test with synthetic screenshot...")
+    print("Running Gemini test with synthetic screenshot...")
     try:
         evidence = extract_evidence("s3://fake-bucket/fake-key.jpg")
         print("\nExtracted Evidence:")
         print(evidence.model_dump_json(indent=2))
-    except Exception as e:
-        print(f"Error during extraction: {e}")
+    except Exception as error:
+        print(f"Extraction failed: {type(error).__name__}")
 
 if __name__ == "__main__":
     run_real_test()

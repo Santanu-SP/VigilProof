@@ -9,6 +9,10 @@ import {
   CognitoUser,
   AuthenticationDetails,
   CognitoUserAttribute,
+  CognitoUserSession,
+  CognitoIdToken,
+  CognitoAccessToken,
+  CognitoRefreshToken,
 } from 'amazon-cognito-identity-js';
 
 const POOL_ID     = import.meta.env.VITE_COGNITO_USER_POOL_ID     || '';
@@ -54,16 +58,70 @@ export function makeAttribute(name, value) {
  * Returns the Google Hosted-UI login URL.
  * Opens the Cognito Hosted UI with Google as the identity provider.
  */
-export function getGoogleLoginUrl() {
+function toBase64Url(bytes) {
+  return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+}
+
+function decodeJwtPayload(token) {
+  const encodedPayload = token.split('.')[1];
+  if (!encodedPayload) throw new Error('Invalid token');
+  const base64 = encodedPayload.replaceAll('-', '+').replaceAll('_', '/');
+  return JSON.parse(atob(base64.padEnd(base64.length + ((4 - base64.length % 4) % 4), '=')));
+}
+
+async function createPkceChallenge(verifier) {
+  const encoded = new TextEncoder().encode(verifier);
+  return toBase64Url(new Uint8Array(await crypto.subtle.digest('SHA-256', encoded)));
+}
+
+export async function getGoogleLoginUrl() {
   if (!isGoogleConfigured()) return null;
+  const random = new Uint8Array(32);
+  crypto.getRandomValues(random);
+  const verifier = toBase64Url(random);
+  const state = toBase64Url(crypto.getRandomValues(new Uint8Array(16)));
+  sessionStorage.setItem('vigilproof.oauth.verifier', verifier);
+  sessionStorage.setItem('vigilproof.oauth.state', state);
   const params = new URLSearchParams({
     client_id:      CLIENT_ID,
     response_type:  'code',
     scope:          'email openid profile',
     redirect_uri:   REDIRECT_IN,
     identity_provider: 'Google',
+    code_challenge: await createPkceChallenge(verifier),
+    code_challenge_method: 'S256',
+    state,
   });
   return `https://${DOMAIN}/oauth2/authorize?${params.toString()}`;
+}
+
+export async function completeGoogleLogin(searchParams) {
+  const code = searchParams.get('code');
+  const state = searchParams.get('state');
+  const verifier = sessionStorage.getItem('vigilproof.oauth.verifier');
+  const expectedState = sessionStorage.getItem('vigilproof.oauth.state');
+  if (!code || !verifier || !state || state !== expectedState) throw new Error('Google sign-in could not be verified. Please try again.');
+
+  const response = await fetch(`https://${DOMAIN}/oauth2/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'authorization_code', client_id: CLIENT_ID, code, redirect_uri: REDIRECT_IN, code_verifier: verifier }),
+  });
+  sessionStorage.removeItem('vigilproof.oauth.verifier');
+  sessionStorage.removeItem('vigilproof.oauth.state');
+  if (!response.ok) throw new Error('Google sign-in could not be completed. Please try again.');
+  const tokens = await response.json();
+  const claims = decodeJwtPayload(tokens.id_token);
+  const username = claims['cognito:username'] || claims.email;
+  const pool = getUserPool();
+  if (!pool || !username || !tokens.access_token || !tokens.id_token) throw new Error('Google sign-in could not be completed. Please try again.');
+  const user = new CognitoUser({ Username: username, Pool: pool });
+  user.setSignInUserSession(new CognitoUserSession({
+    IdToken: new CognitoIdToken({ IdToken: tokens.id_token }),
+    AccessToken: new CognitoAccessToken({ AccessToken: tokens.access_token }),
+    RefreshToken: new CognitoRefreshToken({ RefreshToken: tokens.refresh_token || '' }),
+  }));
+  pool.storage.setItem(`CognitoIdentityServiceProvider.${CLIENT_ID}.LastAuthUser`, username);
 }
 
 /**

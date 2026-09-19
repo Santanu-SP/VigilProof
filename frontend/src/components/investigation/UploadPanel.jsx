@@ -254,6 +254,9 @@ export default function UploadPanel({
           </motion.div>
         )}
       </AnimatePresence>
+      <p style={{ margin: '14px 4px 0', color: 'rgba(203, 221, 217, 0.52)', fontSize: '0.72rem', lineHeight: 1.55 }}>
+        Demo privacy notice: use synthetic or redacted evidence. Do not upload passwords, OTPs, financial credentials, government IDs, or other sensitive personal information.
+      </p>
     </div>
   );
 }

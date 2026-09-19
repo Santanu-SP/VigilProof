@@ -286,7 +286,15 @@ function LandingPage() {
 function App() {
   return (
     <SmoothScroll>
-      <div className="flex flex-col min-h-screen bg-[#09090b] text-white font-sans selection:bg-green-500 selection:text-black">
+      <div className="app-shell flex flex-col min-h-screen text-white font-sans selection:bg-green-500 selection:text-black">
+        <div className="app-shell__forensic-field" aria-hidden="true">
+          <span className="app-shell__grid" />
+          <span className="app-shell__trace app-shell__trace--one" />
+          <span className="app-shell__trace app-shell__trace--two" />
+          <span className="app-shell__pulse app-shell__pulse--one" />
+          <span className="app-shell__pulse app-shell__pulse--two" />
+          <span className="app-shell__sweep" />
+        </div>
         <Navbar />
 
         <main className="flex-grow flex flex-col relative z-10">

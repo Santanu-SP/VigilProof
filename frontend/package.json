@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@studio-freight/lenis": "^1.0.42",
     "@tailwindcss/vite": "^4.3.3",
     "amazon-cognito-identity-js": "^6.3.20",
     "autoprefixer": "^10.6.1",

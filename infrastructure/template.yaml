@@ -1,12 +1,19 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: VigilProof Day-1 AWS foundation
+Description: VigilProof evidence-first serverless application
 
 Parameters:
-  NovaModelId:
+  GeminiApiKeyParameter:
     Type: String
-    Description: Amazon Nova 2 Lite inference profile ID used from the deployment region
-    Default: global.amazon.nova-2-lite-v1:0
+    Description: Existing Standard SecureString parameter name for the Gemini API key
+    Default: /vigilproof/prod/gemini-api-key
+  GoogleClientId:
+    Type: String
+    Description: Google OAuth client ID for Cognito federation
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Description: Google OAuth client secret for Cognito federation
 
 Resources:
   EvidenceBucket:
@@ -101,15 +108,6 @@ Resources:
                   - dynamodb:PutItem
                   - dynamodb:UpdateItem
                 Resource: !GetAtt CasesTable.Arn
-              - Sid: InvokeNova
-                Effect: Allow
-                Action:
-                  - bedrock:InvokeModel
-                  - bedrock:InvokeModelWithResponseStream
-                Resource:
-                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${NovaModelId}"
-                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.nova-2-lite-v1:0"
-                  - !Sub "arn:${AWS::Partition}:bedrock:::foundation-model/amazon.nova-2-lite-v1:0"
               - Sid: ManageBuiltInBrowserSessions
                 Effect: Allow
                 Action:
@@ -147,6 +145,7 @@ Resources:
 
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
+    DependsOn: GoogleIdentityProvider
     Properties:
       UserPoolId: !Ref UserPool
       ClientName: vigilproof-spa
@@ -156,6 +155,32 @@ Resources:
         - ALLOW_USER_PASSWORD_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
       PreventUserExistenceErrors: ENABLED
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email, profile]
+      CallbackURLs: [http://localhost:5173/]
+      LogoutURLs: [http://localhost:5173/]
+      SupportedIdentityProviders: [COGNITO, Google]
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "vigilproof-${AWS::AccountId}-${AWS::Region}"
+      UserPoolId: !Ref UserPool
+
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      ProviderName: Google
+      ProviderType: Google
+      UserPoolId: !Ref UserPool
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: openid email profile
+      AttributeMapping:
+        email: email
+        name: name
 
   VigilProofHttpApi:
     Type: AWS::Serverless::HttpApi
@@ -189,7 +214,7 @@ Resources:
           EVIDENCE_BUCKET: !Ref EvidenceBucket
           CASES_TABLE: !Ref CasesTable
           AI_EXTRACTOR_FUNCTION_NAME: !Ref ExtractorFunction
-          BEDROCK_ENABLED: "false"
+          AI_ENABLED: "true"
       Policies:
         - S3WritePolicy:
             BucketName: !Ref EvidenceBucket
@@ -226,17 +251,16 @@ Resources:
       MemorySize: 512
       Environment:
         Variables:
-          NOVA_MODEL_ID: !Ref NovaModelId
+          AI_PROVIDER: gemini
+          GEMINI_MODEL_ID: gemini-3.8-flash
+          GEMINI_API_KEY_PARAMETER: !Ref GeminiApiKeyParameter
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref EvidenceBucket
         - Statement:
             Effect: Allow
-            Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
-            Resource:
-              - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${NovaModelId}"
-              - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.nova-2-lite-v1:0"
-              - !Sub "arn:${AWS::Partition}:bedrock:::foundation-model/amazon.nova-2-lite-v1:0"
+            Action: ssm:GetParameter
+            Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${GeminiApiKeyParameter}"
 
 Outputs:
   EvidenceBucketName:
@@ -253,6 +277,8 @@ Outputs:
     Value: !Ref UserPool
   UserPoolClientId:
     Value: !Ref UserPoolClient
+  CognitoDomain:
+    Value: !Sub "${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com"
   CaseApiFunctionName:
     Value: !Ref CaseApiFunction
   ExtractorFunctionName:

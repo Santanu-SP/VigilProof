@@ -1,6 +1,7 @@
 import React from 'react';
 import { Shield, EyeOff, FileKey2 } from 'lucide-react';
 import { SectionReveal, RevealItem } from '../ui/SectionReveal';
+import SectionForensicBackdrop from './SectionForensicBackdrop';
 
 const SAFETY_CARDS = [
   {
@@ -31,10 +32,13 @@ export default function SafetySection() {
         padding: '96px 0',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
         background:
-          'radial-gradient(ellipse 60% 50% at 0% 50%, rgba(34,197,94,0.05) 0%, transparent 70%), #09090b',
+          'radial-gradient(ellipse 60% 50% at 0% 50%, rgba(76,165,157,0.07) 0%, transparent 70%), rgba(7, 12, 14, 0.90)',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px' }}>
+      <SectionForensicBackdrop />
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px', position: 'relative', zIndex: 1 }}>
         <SectionReveal>
           <div
             style={{
