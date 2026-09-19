@@ -123,6 +123,10 @@ def test_get_existing_case(dynamodb, s3):
     body = json.loads(get_response['body'])
     assert body['caseId'] == case_id
     assert body['status'] == 'CREATED'
+    assert body['inputType'] == 'image'
+    assert 'evidence' in body
+    assert 'risk' in body
+    assert body['error'] is None
 
 def test_get_forbidden_case(dynamodb, s3):
     create_response = create_case_handler(auth_event(sub="owner-sub"), {})
@@ -175,12 +179,39 @@ def test_successful_analyze_flow(mock_invoke, dynamodb, s3):
     }
     mock_invoke.return_value = lambda_response(mock_payload)
 
+    # Note: Because of our sys.modules mock, risk is always None in this test,
+    # so we shouldn't assert on body['risk']['level'] unless we mock it properly.
+    # I will modify the mock to return a dictionary so it matches the expected risk output if needed, or simply let it be None.
+    # The origin branch had risk engine returning values, so I'll patch the mock inside the test.
+    sys.modules['risk_engine'].assess_risk.return_value = {
+        'level': 'MODERATE',
+        'evidenceScore': 45,
+        'signals': [{'code': 'OTP_REQUEST'}, {'code': 'PAYMENT_REQUEST'}]
+    }
+
     analyze_response = analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})
 
     assert analyze_response['statusCode'] == 200
     body = json.loads(analyze_response['body'])
     assert body['status'] == 'COMPLETED'
     assert body['evidence']['messageText'] == 'Hello'
+    
+    assert body['risk']['level'] == 'MODERATE'
+    assert body['risk']['evidenceScore'] == 45
+    assert [signal['code'] for signal in body['risk']['signals']] == ['OTP_REQUEST', 'PAYMENT_REQUEST']
+
+    invocation = json.loads(mock_invoke.call_args.kwargs['Payload'])
+    assert invocation == {
+        "caseId": case_id,
+        "imageS3Uri": f"s3://test-evidence-bucket/cases/{case_id}/input",
+    }
+
+    # Verify DB persistence
+    table = dynamodb.Table('test-cases-table')
+    item = table.get_item(Key={'caseId': case_id})['Item']
+    assert item['status'] == 'COMPLETED'
+    assert item['evidence']['messageText'] == 'Hello'
+    assert item['risk']['evidenceScore'] == 45
 
 def test_forbidden_analyze_flow(dynamodb, s3):
     create_response = create_case_handler(auth_event(sub="owner-sub"), {})
@@ -222,6 +253,7 @@ def test_analyze_malformed_extractor_output(mock_invoke, dynamodb, s3):
     case_id = json.loads(create_response['body'])['caseId']
     s3.put_object(Bucket='test-evidence-bucket', Key=f"cases/{case_id}/input", Body=b'dummy')
 
+    # Missing fields
     mock_payload = {"messageText": "Hello"}
     mock_invoke.return_value = lambda_response(mock_payload)
 
@@ -231,6 +263,7 @@ def test_analyze_malformed_extractor_output(mock_invoke, dynamodb, s3):
     table = dynamodb.Table('test-cases-table')
     item = table.get_item(Key={'caseId': case_id})['Item']
     assert item['status'] == 'FAILED'
+    assert 'error' in item
 
 @patch('app.lambda_client.invoke')
 def test_repeated_analyze(mock_invoke, dynamodb, s3):
