@@ -3,148 +3,351 @@ import { motion } from 'framer-motion';
 import RiskSummary from './investigation/RiskSummary';
 import EvidenceCard from './investigation/EvidenceCard';
 import ActionGuidance from './investigation/ActionGuidance';
+import { HoverTooltip } from './ui/HoverTooltip';
 import { FileText, Link as LinkIcon, Phone } from 'lucide-react';
 
+/* ── Bento snap animation (heavy spring as specified) ────────────────────────── */
+const bentoContainerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+      delayChildren: 0.1,
+    },
+  },
+};
+
+const bentoItemVariants = {
+  hidden: { opacity: 0, y: 48, scale: 0.97 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      type: 'spring',
+      stiffness: 300, // heavy spring as specified
+      damping: 20,
+      mass: 0.9,
+    },
+  },
+};
+
+/* ── Dark glassmorphic data panel wrapper ─────────────────────────────────────── */
+function DataPanel({ children, colSpan = 1, style = {} }) {
+  return (
+    <motion.div
+      className={colSpan === 2 ? 'result-grid-span-2' : undefined}
+      variants={bentoItemVariants}
+      style={{
+        background: 'rgba(0,0,0,0.45)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        borderRadius: 14,
+        padding: '20px 22px',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+        transition: 'border-color 0.25s, box-shadow 0.25s',
+        ...style,
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = 'rgba(34,197,94,0.18)';
+        e.currentTarget.style.boxShadow = '0 0 24px rgba(34,197,94,0.05)';
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)';
+        e.currentTarget.style.boxShadow = 'none';
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/* ── Panel section header ─────────────────────────────────────────────────────── */
+function PanelHeader({ icon: Icon, label }) {
+  return (
+    <h5
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        fontSize: '0.68rem',
+        fontFamily: 'monospace',
+        fontWeight: 700,
+        textTransform: 'uppercase',
+        letterSpacing: '0.16em',
+        color: 'rgba(255,255,255,0.35)',
+        margin: 0,
+      }}
+    >
+      <Icon size={14} style={{ color: '#22c55e', filter: 'drop-shadow(0 0 4px rgba(34,197,94,0.6))' }} />
+      {label}
+    </h5>
+  );
+}
+
+/* ── Clickable token (URL, phone, UPI) with HoverTooltip ──────────────────────── */
+function DataToken({ value, block = false }) {
+  return (
+    <HoverTooltip textToCopy={value}>
+      <span
+        style={{
+          display: block ? 'block' : 'inline-block',
+          padding: '6px 12px',
+          background: 'rgba(34,197,94,0.04)',
+          borderRadius: 7,
+          fontFamily: 'monospace',
+          fontSize: '0.78rem',
+          color: 'rgba(255,255,255,0.7)',
+          letterSpacing: '0.01em',
+          userSelect: 'none',
+          width: block ? '100%' : undefined,
+          boxSizing: 'border-box',
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {value}
+      </span>
+    </HoverTooltip>
+  );
+}
+
+/* ── Quick entity chip ────────────────────────────────────────────────────────── */
+function EntityChip({ label, value, accent = false }) {
+  return (
+    <motion.div
+      whileHover={{ scale: 1.04 }}
+      whileTap={{ scale: 0.97 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '7px 14px',
+        background: accent ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)',
+        border: `1px solid ${accent ? 'rgba(239,68,68,0.25)' : 'rgba(255,255,255,0.08)'}`,
+        borderRadius: 9999,
+        fontFamily: 'monospace',
+        fontSize: '0.78rem',
+        cursor: 'default',
+        transition: 'border-color 0.15s, box-shadow 0.15s',
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = accent ? 'rgba(239,68,68,0.5)' : 'rgba(34,197,94,0.4)';
+        e.currentTarget.style.boxShadow = accent
+          ? '0 0 12px rgba(239,68,68,0.12)'
+          : '0 0 12px rgba(34,197,94,0.1)';
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = accent ? 'rgba(239,68,68,0.25)' : 'rgba(255,255,255,0.08)';
+        e.currentTarget.style.boxShadow = 'none';
+      }}
+    >
+      <span style={{ color: accent ? '#f87171' : 'rgba(255,255,255,0.3)', fontSize: '0.7rem' }}>{label}</span>
+      <span style={{ color: accent ? '#fca5a5' : 'rgba(255,255,255,0.8)', fontWeight: 700 }}>{value}</span>
+    </motion.div>
+  );
+}
+
+/* ── Main ResultView ─────────────────────────────────────────────────────────── */
 export default function ResultView({ result, onReset }) {
   if (!result) return null;
 
   const { risk, evidence } = result;
-  const isRiskReady = risk && risk.level;
+  const isRiskReady = risk?.level;
 
   return (
-    <div className="max-w-5xl mx-auto w-full px-6 py-12">
+    <div
+      style={{
+        maxWidth: 1100,
+        margin: '0 auto',
+        width: '100%',
+        padding: '80px 24px 64px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 24,
+      }}
+    >
+      {/* ── Risk Summary ── */}
+      {isRiskReady ? (
+        <RiskSummary risk={risk} />
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{
+            background: 'rgba(0,0,0,0.45)',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: 14,
+            padding: '32px',
+            textAlign: 'center',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+          }}
+        >
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#ffffff', marginBottom: 8 }}>
+            Analysis Pending
+          </h2>
+          <p style={{ fontFamily: 'monospace', color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>
+            Still computing final risk score...
+          </p>
+        </motion.div>
+      )}
+
+      {/* ── Bento Grid Evidence ── */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-8"
+        className="result-evidence-grid"
+        style={{
+          display: 'grid',
+          gap: 14,
+        }}
+        variants={bentoContainerVariants}
+        initial="hidden"
+        animate="show"
       >
-        {/* Top: Risk Score / Status */}
-        {isRiskReady ? (
-          <RiskSummary risk={risk} />
-        ) : (
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center">
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">Analysis Pending</h2>
-            <p className="text-slate-600 font-mono">Still computing final risk score...</p>
-          </div>
-        )}
+        {/* Signal cards — each snaps in with stiffness:300, damping:20 */}
+        {risk?.signals?.map((signal, idx) => {
+          const severity = ['OTP_REQUEST', 'PASSWORD_REQUEST', 'PAYMENT_REQUEST'].includes(signal.code)
+            ? 'threat'
+            : 'warning';
+          const observation = signal.source === 'URL'
+            ? 'URL analysis'
+            : signal.source === 'BROWSER'
+              ? 'Browser observation'
+              : 'Message content';
+          const isFeatured = idx === 0 && risk.signals.length % 2 !== 0;
+          return (
+            <motion.div
+              className={isFeatured ? 'result-grid-span-2' : undefined}
+              key={`${signal.code}-${idx}`}
+              variants={bentoItemVariants}
+            >
+              <EvidenceCard
+                signalName={signal.title}
+                observation={observation}
+                reason={signal.detail}
+                severity={severity}
+                score={signal.weight}
+              />
+            </motion.div>
+          );
+        })}
 
-        {/* Why this was flagged (Primary Signals) */}
-        {risk?.signals && risk.signals.length > 0 && (
-          <div className="flex flex-col gap-4">
-            <h3 className="text-lg font-bold text-slate-900 uppercase tracking-widest font-mono border-b border-slate-200 pb-2">Why this was flagged</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {risk.signals.map((signal, idx) => {
-                const structuredSignal = typeof signal === 'object' && signal !== null;
-                const title = structuredSignal ? signal.title || signal.code : signal;
-                const detail = structuredSignal ? signal.detail : 'Reported by the risk engine.';
-                const source = structuredSignal && signal.source
-                  ? `Source: ${signal.source}`
-                  : 'Risk signal';
-                const weight = structuredSignal && Number.isFinite(signal.weight)
-                  ? signal.weight
-                  : null;
-
-                return (
-                  <EvidenceCard
-                    key={structuredSignal && signal.code ? signal.code : idx}
-                    signalName={title || 'Risk signal'}
-                    observation={source}
-                    reason={detail || 'No additional detail was provided.'}
-                    severity={weight >= 25 ? 'threat' : 'warning'}
-                    score={weight}
-                  />
-                );
-              })}
+        {/* URLs panel */}
+        {evidence?.urls?.length > 0 && (
+          <DataPanel colSpan={2}>
+            <PanelHeader icon={LinkIcon} label="Observed URLs" />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {evidence.urls.map((url, i) => (
+                <DataToken key={i} value={url} />
+              ))}
             </div>
-          </div>
+          </DataPanel>
         )}
 
-        {/* Extracted Raw Evidence */}
-        {evidence && (
-          <div className="flex flex-col gap-4 mt-4">
-            <h3 className="text-lg font-bold text-slate-900 uppercase tracking-widest font-mono border-b border-slate-200 pb-2">Extracted Evidence</h3>
-
-            <div className="flex flex-wrap gap-3">
-              {evidence.claimedOrganization && (
-                <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-md px-3 py-1.5 font-mono text-sm">
-                  <span className="text-slate-500">Org:</span>
-                  <span className="text-slate-900 font-medium">{evidence.claimedOrganization}</span>
-                </div>
-              )}
-              {evidence.amounts && evidence.amounts.length > 0 && (
-                <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-md px-3 py-1.5 font-mono text-sm">
-                  <span className="text-slate-500">Amount:</span>
-                  <span className="text-slate-900 font-medium">{evidence.amounts.join(', ')}</span>
-                </div>
-              )}
-              {evidence.asksForOtp && (
-                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-md px-3 py-1.5 font-mono text-sm">
-                  <span className="text-red-500">Req:</span>
-                  <span className="text-red-700 font-medium">OTP / Password</span>
-                </div>
-              )}
-              {evidence.asksForPayment && (
-                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-md px-3 py-1.5 font-mono text-sm">
-                  <span className="text-red-500">Req:</span>
-                  <span className="text-red-700 font-medium">Payment</span>
-                </div>
-              )}
+        {/* Phone Numbers panel */}
+        {evidence?.phoneNumbers?.length > 0 && (
+          <DataPanel colSpan={1}>
+            <PanelHeader icon={Phone} label="Phone Numbers" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {evidence.phoneNumbers.map((phone, i) => (
+                <DataToken key={i} value={phone} block />
+              ))}
             </div>
+          </DataPanel>
+        )}
 
-            {/* Structured Lists */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-              {evidence.urls && evidence.urls.length > 0 && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                  <h5 className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 font-mono">
-                    <LinkIcon size={16}/> URLs Found
-                  </h5>
-                  <ul className="flex flex-col gap-2 font-mono text-sm text-slate-600 break-all">
-                    {evidence.urls.map((url, i) => <li key={i} className="bg-white p-2 border border-slate-200 rounded">{url}</li>)}
-                  </ul>
-                </div>
-              )}
-
-              {evidence.phoneNumbers && evidence.phoneNumbers.length > 0 && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                  <h5 className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 font-mono">
-                    <Phone size={16}/> Phone Numbers
-                  </h5>
-                  <ul className="flex flex-col gap-2 font-mono text-sm text-slate-600">
-                    {evidence.phoneNumbers.map((phone, i) => <li key={i} className="bg-white p-2 border border-slate-200 rounded">{phone}</li>)}
-                  </ul>
-                </div>
-              )}
-
-              {evidence.upiIds && evidence.upiIds.length > 0 && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                  <h5 className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 font-mono">
-                    <FileText size={16}/> UPI IDs
-                  </h5>
-                  <ul className="flex flex-col gap-2 font-mono text-sm text-slate-600">
-                    {evidence.upiIds.map((upi, i) => <li key={i} className="bg-white p-2 border border-slate-200 rounded">{upi}</li>)}
-                  </ul>
-                </div>
-              )}
+        {/* UPI IDs panel */}
+        {evidence?.upiIds?.length > 0 && (
+          <DataPanel colSpan={1}>
+            <PanelHeader icon={FileText} label="UPI IDs" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {evidence.upiIds.map((upi, i) => (
+                <DataToken key={i} value={upi} block />
+              ))}
             </div>
-          </div>
+          </DataPanel>
         )}
 
-        {/* Action Guidance */}
-        {isRiskReady && (
-          <div className="mt-4">
-            <ActionGuidance riskLevel={risk.level} />
-          </div>
-        )}
-
-        <div className="mt-8 flex justify-center">
-          <button
-            className="px-6 py-3 bg-white border border-slate-300 text-slate-700 font-medium rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
-            onClick={onReset}
+        {/* Entity chips row */}
+        {(evidence?.claimedOrganization ||
+          evidence?.amounts?.length > 0 ||
+          evidence?.asksForOtp ||
+          evidence?.asksForPassword ||
+          evidence?.asksForPayment) && (
+          <motion.div
+            className="result-grid-span-3"
+            variants={bentoItemVariants}
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              alignItems: 'center',
+            }}
           >
-            Inspect another message
-          </button>
-        </div>
+            {evidence.claimedOrganization && (
+              <EntityChip label="Claimed Org:" value={evidence.claimedOrganization} />
+            )}
+            {evidence.amounts?.length > 0 && (
+              <EntityChip label="Amount:" value={evidence.amounts.join(', ')} />
+            )}
+            {evidence.asksForOtp && (
+              <EntityChip label="Req:" value="OTP" accent />
+            )}
+            {evidence.asksForPassword && (
+              <EntityChip label="Req:" value="Password" accent />
+            )}
+            {evidence.asksForPayment && (
+              <EntityChip label="Req:" value="Payment" accent />
+            )}
+          </motion.div>
+        )}
+      </motion.div>
 
+      {/* ── Action Guidance ── */}
+      {isRiskReady && (
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: 'spring', stiffness: 200, damping: 20, delay: 0.35 }}
+        >
+          <ActionGuidance riskLevel={risk.level} />
+        </motion.div>
+      )}
+
+      {/* ── Reset button ── */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.8 }}
+        style={{ marginTop: 8, display: 'flex', justifyContent: 'center' }}
+      >
+        <motion.button
+          whileHover={{ scale: 1.03, borderColor: 'rgba(34,197,94,0.5)', boxShadow: '0 0 20px rgba(34,197,94,0.12)' }}
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+          onClick={onReset}
+          style={{
+            padding: '12px 28px',
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 9999,
+            color: 'rgba(255,255,255,0.65)',
+            fontFamily: 'monospace',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            letterSpacing: '0.02em',
+            transition: 'color 0.2s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#ffffff'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.65)'; }}
+        >
+          Inspect another message
+        </motion.button>
       </motion.div>
     </div>
   );

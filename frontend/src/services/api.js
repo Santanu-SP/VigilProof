@@ -1,12 +1,44 @@
 import { mockCreateCase, mockStartAnalysis, mockGetCase } from '../mocks/apiMocks.js';
+import { getUserPool } from '../auth/cognitoClient';
 
 const getBaseUrl = () => (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const isMockMode = import.meta.env.VITE_USE_MOCK_API === 'true';
 
+/** Retrieves current JWT from Cognito if session is valid */
+async function getAuthToken() {
+  const pool = getUserPool();
+  if (!pool) return null;
+
+  const cognitoUser = pool.getCurrentUser();
+  if (!cognitoUser) return null;
+
+  return new Promise((resolve) => {
+    cognitoUser.getSession((err, session) => {
+      if (err || !session?.isValid()) {
+        resolve(null);
+      } else {
+        resolve(session.getIdToken().getJwtToken());
+      }
+    });
+  });
+}
+
+/** Wrapper around fetch to automatically inject auth headers */
+async function fetchWithAuth(url, options = {}) {
+  const token = await getAuthToken();
+  const headers = {
+    ...options.headers,
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return fetch(url, { ...options, headers });
+}
+
 export async function createCase() {
   if (isMockMode) return mockCreateCase();
 
-  const response = await fetch(`${getBaseUrl()}/cases`, {
+  const response = await fetchWithAuth(`${getBaseUrl()}/cases`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -14,6 +46,9 @@ export async function createCase() {
   });
 
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('Authentication required or session expired. Please sign in again.');
+    }
     throw new Error('Case creation failed. The service might be unavailable.');
   }
 
@@ -27,6 +62,9 @@ export async function uploadEvidence(uploadUrl, file) {
     return true;
   }
 
+  // Pre-signed S3 URLs usually don't want the Authorization header meant for our API,
+  // but if this is an API route, fetchWithAuth would be used.
+  // Assuming uploadUrl is a direct S3 pre-signed URL, we use raw fetch.
   const response = await fetch(uploadUrl, {
     method: 'PUT',
     body: file,
@@ -45,11 +83,15 @@ export async function uploadEvidence(uploadUrl, file) {
 export async function startAnalysis(caseId) {
   if (isMockMode) return mockStartAnalysis(caseId);
 
-  const response = await fetch(`${getBaseUrl()}/cases/${caseId}/analyze`, {
+  const response = await fetchWithAuth(`${getBaseUrl()}/cases/${caseId}/analyze`, {
     method: 'POST'
   });
 
   if (!response.ok) {
+    if (response.status === 503) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || 'Evidence analysis is temporarily unavailable.');
+    }
     throw new Error('Analysis failed to start.');
   }
 
@@ -59,7 +101,7 @@ export async function startAnalysis(caseId) {
 export async function getCase(caseId) {
   if (isMockMode) return mockGetCase(caseId);
 
-  const response = await fetch(`${getBaseUrl()}/cases/${caseId}`);
+  const response = await fetchWithAuth(`${getBaseUrl()}/cases/${caseId}`);
 
   if (!response.ok) {
     throw new Error('Failed to fetch case details.');

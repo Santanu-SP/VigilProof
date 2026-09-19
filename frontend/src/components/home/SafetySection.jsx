@@ -1,64 +1,175 @@
 import React from 'react';
 import { Shield, EyeOff, FileKey2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { SectionReveal, RevealItem } from '../ui/SectionReveal';
+import SectionForensicBackdrop from './SectionForensicBackdrop';
+
+const SAFETY_CARDS = [
+  {
+    icon: FileKey2,
+    title: 'No credential entry',
+    description: 'We never ask for or enter passwords, OTPs, or PINs.',
+    accentColor: '#22c55e',
+  },
+  {
+    icon: Shield,
+    title: 'No transactions',
+    description: 'We do not submit payment forms or connect to your bank.',
+    accentColor: '#22c55e',
+  },
+  {
+    icon: EyeOff,
+    title: 'Controlled inspection',
+    description: 'The browser workflow treats pages as untrusted and never submits forms.',
+    accentColor: '#22c55e',
+  },
+];
 
 export default function SafetySection() {
   return (
-    <section id="safety" className="py-24 bg-slate-50 border-b border-slate-200">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, margin: "-50px" }}
-            transition={{ duration: 0.5 }}
-            className="flex flex-col"
+    <section
+      id="safety"
+      style={{
+        padding: '96px 0',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        background:
+          'radial-gradient(ellipse 60% 50% at 0% 50%, rgba(76,165,157,0.07) 0%, transparent 70%), rgba(7, 12, 14, 0.90)',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      <SectionForensicBackdrop />
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px', position: 'relative', zIndex: 1 }}>
+        <SectionReveal>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: 48,
+              alignItems: 'center',
+            }}
           >
-            <span className="text-xs font-mono font-bold tracking-widest uppercase text-slate-500 mb-4 inline-block">Privacy & Security</span>
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900 mb-6">Designed to investigate without taking risky actions.</h2>
-            <p className="text-lg text-slate-600 font-mono leading-relaxed">
-              VigilProof acts as a buffer between you and potential threats. We never interact with suspicious forms or expose your personal data.
-            </p>
-          </motion.div>
+            {/* Left: text block */}
+            <RevealItem style={{ gridColumn: 'span 1' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    fontSize: '0.7rem',
+                    fontFamily: 'monospace',
+                    fontWeight: 700,
+                    letterSpacing: '0.18em',
+                    textTransform: 'uppercase',
+                    color: '#22c55e',
+                    marginBottom: 16,
+                    padding: '4px 12px',
+                    border: '1px solid rgba(34,197,94,0.25)',
+                    borderRadius: 9999,
+                    background: 'rgba(34,197,94,0.06)',
+                    alignSelf: 'flex-start',
+                  }}
+                >
+                  Privacy &amp; Security
+                </span>
+                <h2
+                  style={{
+                    fontSize: 'clamp(1.8rem, 4vw, 2.6rem)',
+                    fontWeight: 800,
+                    color: '#ffffff',
+                    letterSpacing: '-0.03em',
+                    marginBottom: 20,
+                    lineHeight: 1.15,
+                  }}
+                >
+                  Designed to investigate{' '}
+                  <span style={{ color: '#22c55e' }}>without taking risky actions.</span>
+                </h2>
+                <p
+                  style={{
+                    fontSize: '1rem',
+                    fontFamily: 'monospace',
+                    color: 'rgba(255,255,255,0.45)',
+                    lineHeight: 1.75,
+                  }}
+                >
+                  VigilProof acts as a buffer between you and potential threats. We never
+                  interact with suspicious forms or expose your personal data.
+                </p>
+              </div>
+            </RevealItem>
 
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, margin: "-50px" }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="flex flex-col gap-6"
-          >
-            <div className="flex gap-6 items-start p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div className="bg-slate-100 p-3 rounded-lg text-slate-700 shrink-0">
-                <FileKey2 size={24} />
-              </div>
-              <div>
-                <h4 className="text-lg font-bold text-slate-900 mb-1">No credential entry</h4>
-                <p className="text-sm font-mono text-slate-600">We never ask for or enter passwords, OTPs, or PINs.</p>
-              </div>
+            {/* Right: safety cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {SAFETY_CARDS.map(({ icon: Icon, title, description, accentColor }) => (
+                <RevealItem key={title}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 18,
+                      padding: '20px 24px',
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                      borderRadius: 14,
+                      transition: 'border-color 0.25s, box-shadow 0.25s',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = 'rgba(34,197,94,0.22)';
+                      e.currentTarget.style.boxShadow = '0 0 24px rgba(34,197,94,0.05)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 10,
+                        background: 'rgba(34,197,94,0.08)',
+                        border: '1px solid rgba(34,197,94,0.18)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Icon
+                        size={18}
+                        style={{
+                          color: accentColor,
+                          filter: 'drop-shadow(0 0 5px rgba(34,197,94,0.5))',
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <h4
+                        style={{
+                          fontSize: '0.95rem',
+                          fontWeight: 700,
+                          color: '#ffffff',
+                          marginBottom: 4,
+                        }}
+                      >
+                        {title}
+                      </h4>
+                      <p
+                        style={{
+                          fontSize: '0.82rem',
+                          fontFamily: 'monospace',
+                          color: 'rgba(255,255,255,0.4)',
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {description}
+                      </p>
+                    </div>
+                  </div>
+                </RevealItem>
+              ))}
             </div>
-
-            <div className="flex gap-6 items-start p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div className="bg-slate-100 p-3 rounded-lg text-slate-700 shrink-0">
-                <Shield size={24} />
-              </div>
-              <div>
-                <h4 className="text-lg font-bold text-slate-900 mb-1">No transactions</h4>
-                <p className="text-sm font-mono text-slate-600">We do not submit payment forms or connect to your bank.</p>
-              </div>
-            </div>
-
-            <div className="flex gap-6 items-start p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div className="bg-slate-100 p-3 rounded-lg text-slate-700 shrink-0">
-                <EyeOff size={24} />
-              </div>
-              <div>
-                <h4 className="text-lg font-bold text-slate-900 mb-1">Non-interactive analysis</h4>
-                <p className="text-sm font-mono text-slate-600">The upload workflow does not open links or submit forms.</p>
-              </div>
-            </div>
-          </motion.div>
-        </div>
+          </div>
+        </SectionReveal>
       </div>
     </section>
   );

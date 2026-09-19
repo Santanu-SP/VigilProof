@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, Suspense, lazy } from 'react';
+import { Routes, Route } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { createCase, uploadEvidence, startAnalysis, getCase } from './services/api';
 
@@ -6,9 +7,16 @@ import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import { SmoothScroll } from './components/layout/SmoothScroll';
 import { PageTransition } from './components/layout/PageTransition';
-import { Skeleton } from './components/ui/Skeleton';
+import { HeroSkeleton, SectionSkeleton, ResultSkeleton, ProgressSkeleton } from './components/ui/Skeleton';
 
-import './App.css';
+// Auth and Protected Routes
+import ProtectedRoute from './auth/ProtectedRoute';
+import LoginPage from './components/auth/LoginPage';
+import RegisterPage from './components/auth/RegisterPage';
+import VerifyEmailPage from './components/auth/VerifyEmailPage';
+import ForgotPasswordPage from './components/auth/ForgotPasswordPage';
+import ResetPasswordPage from './components/auth/ResetPasswordPage';
+import ProfilePage from './components/profile/ProfilePage';
 
 // Lazy loaded sections
 const Hero = lazy(() => import('./components/home/Hero'));
@@ -24,12 +32,13 @@ const ResultView = lazy(() => import('./components/ResultView'));
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-function App() {
+function InvestigationFlow() {
   const [file, setFile] = useState(null);
   const [error, setError] = useState(null);
   const [stage, setStage] = useState('HOME'); // HOME, UPLOADING, PROCESSING, RESULT
   const [statusMessage, setStatusMessage] = useState('');
   const [result, setResult] = useState(null);
+  const [savedCaseId, setSavedCaseId] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
   const pollIntervalRef = useRef(null);
@@ -48,8 +57,8 @@ function App() {
     setError(null);
     if (!selectedFile) return false;
 
-    if (!selectedFile.type.startsWith('image/')) {
-      setError('Unsupported file type. Please upload an image.');
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(selectedFile.type)) {
+      setError('Choose a PNG, JPEG, WebP, or GIF screenshot.');
       return false;
     }
 
@@ -148,11 +157,13 @@ function App() {
 
     try {
       setError(null);
+      setSavedCaseId(null);
       setStage('UPLOADING');
       setStatusMessage('UPLOADING');
 
       // 1. Create Case
       const { caseId, uploadUrl } = await createCase();
+      setSavedCaseId(caseId);
 
       // 2. Upload Evidence
       await uploadEvidence(uploadUrl, file);
@@ -185,6 +196,7 @@ function App() {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     setFile(null);
     setResult(null);
+    setSavedCaseId(null);
     setError(null);
     setStage('HOME');
     if (fileInputRef.current) {
@@ -197,53 +209,110 @@ function App() {
   };
 
   return (
-    <SmoothScroll>
-      <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-slate-900 selection:text-slate-50">
-        <Navbar />
+    <>
+      {error && (
+        <div className="max-w-3xl mx-auto w-full px-6 pt-20 relative z-20" role="alert">
+          <div style={{ background: 'rgba(172,110,39,0.12)', border: '1px solid rgba(232,174,84,0.36)', color: '#f3d6a7', padding: '16px 20px', borderRadius: '10px' }}>
+            <span className="text-sm">{error}</span>
+            {savedCaseId && <p className="text-xs mt-2 text-white/60">Case reference: <code>{savedCaseId}</code>. No result was produced.</p>}
+          </div>
+        </div>
+      )}
 
-        <main className="flex-grow flex flex-col relative z-10 pt-20">
-          {error && (
-            <div className="max-w-7xl mx-auto w-full px-6 mt-8">
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
-                <span className="font-mono text-sm">{error}</span>
+      <AnimatePresence mode="wait">
+        {stage === 'HOME' && (
+          <PageTransition keyProp="upload">
+            <div style={{ padding: '120px 24px 60px', minHeight: '100vh', display: 'flex', justifyContent: 'center' }}>
+              <div style={{ width: '100%', maxWidth: '680px' }}>
+                <div className="text-center mb-8">
+                  <p className="font-mono text-xs uppercase tracking-[.22em] text-emerald-300/70 mb-3">Secure evidence workspace</p>
+                  <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3rem)', fontWeight: 800, marginBottom: '12px' }}>Start an investigation</h1>
+                  <p className="text-white/55 max-w-xl mx-auto">Add a screenshot to a private case. Observable evidence stays separate from the final risk assessment.</p>
+                </div>
+                <Suspense fallback={<HeroSkeleton />}>
+                  <UploadPanel {...uploadProps} />
+                </Suspense>
               </div>
             </div>
-          )}
+          </PageTransition>
+        )}
 
-          <AnimatePresence mode="wait">
-            {stage === 'HOME' && (
-              <PageTransition keyProp="home">
-                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-4xl h-96" /></div>}>
-                  <Hero>
-                    <Suspense fallback={<Skeleton className="w-full h-64" />}>
-                      <UploadPanel {...uploadProps} />
-                    </Suspense>
-                  </Hero>
-                  <TrustStrip />
-                  <HowItWorks />
-                  <EvidencePhilosophy />
-                  <EvidenceTrail />
-                  <SafetySection />
-                </Suspense>
-              </PageTransition>
-            )}
+        {(stage === 'UPLOADING' || stage === 'PROCESSING') && (
+          <PageTransition keyProp="processing">
+            <Suspense fallback={<ProgressSkeleton />}>
+              <AnalysisProgress currentStage={stage} statusMessage={statusMessage} />
+            </Suspense>
+          </PageTransition>
+        )}
 
-            {(stage === 'UPLOADING' || stage === 'PROCESSING') && (
-              <PageTransition keyProp="processing">
-                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-3xl h-64" /></div>}>
-                  <AnalysisProgress currentStage={stage} statusMessage={statusMessage} />
-                </Suspense>
-              </PageTransition>
-            )}
+        {stage === 'RESULT' && (
+          <PageTransition keyProp="result">
+            <Suspense fallback={<ResultSkeleton />}>
+              <ResultView result={result} onReset={resetFlow} />
+            </Suspense>
+          </PageTransition>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
 
-            {stage === 'RESULT' && (
-              <PageTransition keyProp="result">
-                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-6xl h-[80vh]" /></div>}>
-                  <ResultView result={result} onReset={resetFlow} />
-                </Suspense>
-              </PageTransition>
-            )}
-          </AnimatePresence>
+function LandingPage() {
+  return (
+    <PageTransition keyProp="home">
+      <Suspense fallback={<HeroSkeleton />}>
+        <Hero />
+      </Suspense>
+      <Suspense fallback={<SectionSkeleton cards={4} cardHeight={60} />}>
+        <TrustStrip />
+      </Suspense>
+      <Suspense fallback={<SectionSkeleton cards={4} cardHeight={180} />}>
+        <HowItWorks />
+      </Suspense>
+      <Suspense fallback={<SectionSkeleton cards={2} cardHeight={280} />}>
+        <EvidencePhilosophy />
+      </Suspense>
+      <Suspense fallback={<SectionSkeleton cards={1} cardHeight={420} />}>
+        <EvidenceTrail />
+      </Suspense>
+      <Suspense fallback={<SectionSkeleton cards={3} cardHeight={120} />}>
+        <SafetySection />
+      </Suspense>
+    </PageTransition>
+  );
+}
+
+
+function App() {
+  return (
+    <SmoothScroll>
+      <div className="app-shell flex flex-col min-h-screen text-white font-sans selection:bg-green-500 selection:text-black">
+        <div className="app-shell__forensic-field" aria-hidden="true">
+          <span className="app-shell__grid" />
+          <span className="app-shell__trace app-shell__trace--one" />
+          <span className="app-shell__trace app-shell__trace--two" />
+          <span className="app-shell__pulse app-shell__pulse--one" />
+          <span className="app-shell__pulse app-shell__pulse--two" />
+          <span className="app-shell__sweep" />
+        </div>
+        <Navbar />
+
+        <main className="flex-grow flex flex-col relative z-10">
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+
+            {/* Auth Routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+            {/* Protected Routes */}
+            <Route path="/investigate" element={<ProtectedRoute><InvestigationFlow /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+            <Route path="*" element={<div className="min-h-[70vh] flex flex-col items-center justify-center px-6 text-center"><h1 className="text-4xl font-bold mb-3">Page not found</h1><p className="text-white/55 mb-6">This route does not exist.</p><a href="/" className="text-green-400 underline underline-offset-4">Return to VigilProof</a></div>} />
+          </Routes>
         </main>
 
         <Footer />
