@@ -64,7 +64,7 @@ export default function Hero({ children }) {
   return (
     <section
       id="hero"
-      className="relative flex flex-col items-center justify-center min-h-screen overflow-hidden"
+      className="relative flex flex-col items-center justify-center min-h-screen overflow-hidden pt-24 pb-12"
       style={{ background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(34,197,94,0.08) 0%, transparent 70%), #09090b' }}
     >
       {/* ── Three.js particle background ── */}

@@ -12,6 +12,7 @@
   "dependencies": {
     "@studio-freight/lenis": "^1.0.42",
     "@tailwindcss/vite": "^4.3.3",
+    "amazon-cognito-identity-js": "^6.3.20",
     "autoprefixer": "^10.6.1",
     "clsx": "^2.1.1",
     "framer-motion": "^13.4.0",
@@ -19,6 +20,7 @@
     "postcss": "^8.5.28",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.4",
     "tailwind-merge": "^3.7.0",
     "tailwindcss": "^4.3.3",
     "three": "^0.186.0"
