@@ -20,7 +20,7 @@ export default function Footer() {
           <div className="flex gap-6">
             <Link to="/#how-it-works" className="text-sm text-white/40 hover:text-white font-mono transition-colors">How it works</Link>
             <Link to="/#safety" className="text-sm text-white/40 hover:text-white font-mono transition-colors">Safety</Link>
-            <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="text-sm text-white/40 hover:text-white font-mono transition-colors">GitHub</a>
+            <a href="https://github.com/Santanu-SP/VigilProof" target="_blank" rel="noopener noreferrer" className="text-sm text-white/40 hover:text-white font-mono transition-colors">Source code</a>
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { humanizeAuthError, isGoogleConfigured, getGoogleLoginUrl } from '../../auth/cognitoClient';
@@ -15,12 +15,14 @@ export default function LoginPage() {
   const [showPw, setShowPw]     = useState(false);
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
+  const requestedRedirect = searchParams.get('redirect');
+  const redirect = requestedRedirect?.startsWith('/') && !requestedRedirect.startsWith('//')
+    ? requestedRedirect
+    : '/investigate';
 
   // If already logged in, redirect
   if (isAuthenticated) {
-    const redirect = searchParams.get('redirect') || '/investigate';
-    navigate(redirect, { replace: true });
-    return null;
+    return <Navigate to={redirect} replace />;
   }
 
   const handleSubmit = async (e) => {
@@ -35,7 +37,6 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email.trim(), password);
-      const redirect = searchParams.get('redirect') || '/investigate';
       navigate(redirect, { replace: true });
     } catch (err) {
       // If user hasn't confirmed their email, redirect to verify

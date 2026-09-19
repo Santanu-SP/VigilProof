@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Copy, Check, ExternalLink } from 'lucide-react';
+import { Copy, Check } from 'lucide-react';
 
 /**
  * HoverTooltip — dark neon green tooltip that springs out on hover.
  * On click, copies `textToCopy` to clipboard.
  * Shows a localized green glow border snap on the child wrapper on hover.
  */
-export function HoverTooltip({ children, textToCopy, className, showExternal = false }) {
+export function HoverTooltip({ children, textToCopy, className }) {
   const [isHovered, setIsHovered] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -23,11 +23,15 @@ export function HoverTooltip({ children, textToCopy, className, showExternal = f
   };
 
   return (
-    <div
+    <button
+      type="button"
+      aria-label={`Copy ${textToCopy}`}
       className={className}
-      style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}
+      style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'pointer', padding: 0, background: 'none', border: 0, font: 'inherit', textAlign: 'left' }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onFocus={() => setIsHovered(true)}
+      onBlur={() => setIsHovered(false)}
       onClick={handleCopy}
     >
       {/* Glow wrapper — border snaps to neon green on hover */}
@@ -101,6 +105,6 @@ export function HoverTooltip({ children, textToCopy, className, showExternal = f
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </button>
   );
 }

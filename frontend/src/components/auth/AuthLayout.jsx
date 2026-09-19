@@ -1,6 +1,5 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Shield } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 /**
@@ -42,27 +41,6 @@ export default function AuthLayout({ children, title, subtitle }) {
           zIndex: 1,
         }}
       >
-        {/* Logo */}
-        <Link
-          to="/"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            textDecoration: 'none',
-            marginBottom: 32,
-          }}
-        >
-          <Shield
-            size={24}
-            style={{ color: '#22c55e', filter: 'drop-shadow(0 0 8px rgba(34,197,94,0.6))' }}
-          />
-          <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#fff', letterSpacing: '-0.03em' }}>
-            Vigil<span style={{ color: '#22c55e' }}>Proof</span>
-          </span>
-        </Link>
-
         {/* Glass card */}
         <div
           style={{
@@ -93,7 +71,7 @@ export default function AuthLayout({ children, title, subtitle }) {
                 <p
                   style={{
                     fontSize: '0.85rem',
-                    fontFamily: 'monospace',
+                    fontFamily: 'inherit',
                     color: 'rgba(255,255,255,0.4)',
                     lineHeight: 1.5,
                   }}

@@ -121,7 +121,7 @@ export default function EvidencePhilosophy() {
                       lineHeight: 1,
                     }}
                   >
-                    98%
+                    ?
                   </span>
                   <span
                     style={{
@@ -136,7 +136,7 @@ export default function EvidencePhilosophy() {
                       background: 'rgba(239,68,68,0.1)',
                     }}
                   >
-                    Malicious
+                    Unexplained verdict
                   </span>
                   <p
                     style={{

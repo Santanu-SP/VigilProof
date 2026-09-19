@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { LogOut, User as UserIcon, Shield, Edit2, Check, X, BadgeCheck } from 'lucide-react';
+import { LogOut, Edit2, Check, X, BadgeCheck } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { Link } from 'react-router-dom';
 

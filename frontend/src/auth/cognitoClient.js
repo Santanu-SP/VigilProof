@@ -13,7 +13,6 @@ import {
 
 const POOL_ID     = import.meta.env.VITE_COGNITO_USER_POOL_ID     || '';
 const CLIENT_ID   = import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID || '';
-const REGION      = import.meta.env.VITE_AWS_REGION                || 'ap-south-1';
 const DOMAIN      = import.meta.env.VITE_COGNITO_DOMAIN            || '';
 const REDIRECT_IN = import.meta.env.VITE_COGNITO_REDIRECT_SIGN_IN  || window.location.origin + '/login';
 const REDIRECT_OUT= import.meta.env.VITE_COGNITO_REDIRECT_SIGN_OUT || window.location.origin;

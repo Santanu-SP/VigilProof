@@ -1,7 +1,7 @@
-import React, { useState, useRef, useCallback, Suspense, lazy } from 'react';
-import { motion, useMotionValue, useSpring } from 'framer-motion';
-
-const ParticleWave = lazy(() => import('./ParticleWave'));
+import React, { useRef, useCallback } from 'react';
+import { motion, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import ForensicBackground from './ForensicBackground';
 
 // ── Magnetic Button ────────────────────────────────────────────────────────────
 function MagneticButton({ children, className, id, onClick }) {
@@ -54,24 +54,16 @@ const itemVariants = {
 
 // ── Hero ───────────────────────────────────────────────────────────────────────
 export default function Hero({ children }) {
-  const [inspecting, setInspecting] = useState(false);
-
-  const scrollToInspect = () => {
-    setInspecting(true);
-    document.getElementById('inspect')?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const navigate = useNavigate();
+  const reduceMotion = useReducedMotion();
 
   return (
     <section
       id="hero"
       className="relative flex flex-col items-center justify-center min-h-screen overflow-hidden pt-24 pb-12"
-      style={{ background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(34,197,94,0.08) 0%, transparent 70%), #09090b' }}
+      style={{ background: '#090f14' }}
     >
-      {/* ── Three.js particle background ── */}
-      <Suspense fallback={null}>
-        <ParticleWave />
-      </Suspense>
-
+      <ForensicBackground />
       {/* ── Scan-line overlay ── */}
       <div
         aria-hidden="true"
@@ -88,7 +80,7 @@ export default function Hero({ children }) {
       <motion.div
         className="relative z-10 flex flex-col items-center text-center px-6 max-w-4xl mx-auto"
         variants={containerVariants}
-        initial="hidden"
+        initial={reduceMotion ? false : 'hidden'}
         animate="visible"
       >
         {/* Trust badge */}
@@ -120,7 +112,7 @@ export default function Hero({ children }) {
                 flexShrink: 0,
               }}
             />
-            Trusted by 5,000+ teams worldwide
+            EVIDENCE-FIRST DIGITAL INVESTIGATION
           </span>
         </motion.div>
 
@@ -136,9 +128,9 @@ export default function Hero({ children }) {
             marginBottom: '1.5rem',
           }}
         >
-          Every Signal.{' '}
+          See the evidence.{' '}
           <span style={{ color: '#22c55e', position: 'relative' }}>
-            One Platform.
+            Decide with clarity.
             {/* Underline glow */}
             <span
               aria-hidden="true"
@@ -168,8 +160,8 @@ export default function Hero({ children }) {
             fontWeight: 400,
           }}
         >
-          Collect, process, and visualize your data through a unified platform
-          built for teams that move fast.
+          VigilProof doesn't ask you to trust an AI verdict. It shows you the
+          observable signals behind an investigation.
         </motion.p>
 
         {/* CTA buttons */}
@@ -180,7 +172,7 @@ export default function Hero({ children }) {
           {/* Primary CTA */}
           <MagneticButton
             id="cta-start-free"
-            onClick={scrollToInspect}
+            onClick={() => navigate('/investigate')}
             className=""
             style={{}}
           >
@@ -209,7 +201,7 @@ export default function Hero({ children }) {
                 e.currentTarget.style.boxShadow = '0 0 20px rgba(34,197,94,0.35)';
               }}
             >
-              Start Free
+              Start Investigation
             </span>
           </MagneticButton>
 
@@ -242,7 +234,7 @@ export default function Hero({ children }) {
                 e.currentTarget.style.background = 'transparent';
               }}
             >
-              Learn More
+              See How It Works
             </span>
           </MagneticButton>
         </motion.div>
@@ -282,7 +274,7 @@ export default function Hero({ children }) {
           }}
         >
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }} />
-          No credentials required. Never enter passwords or OTPs.
+          Never enter passwords or OTPs into a suspicious page.
         </motion.p>
       </motion.div>
 

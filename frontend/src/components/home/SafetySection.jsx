@@ -17,8 +17,8 @@ const SAFETY_CARDS = [
   },
   {
     icon: EyeOff,
-    title: 'Sandboxed inspection',
-    description: 'Suspicious pages are treated as untrusted and fully isolated.',
+    title: 'Controlled inspection',
+    description: 'The browser workflow treats pages as untrusted and never submits forms.',
     accentColor: '#22c55e',
   },
 ];

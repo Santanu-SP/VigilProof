@@ -5,12 +5,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthProvider';
 
 const NAV_LINKS = [
-  { label: 'Platform',      href: '/#how-it-works' },
-  { label: 'Products',      href: '/#why-vigilproof' },
-  { label: 'Industries',    href: '/#safety' },
-  { label: 'Pricing',       href: '/#pricing' },
-  { label: 'Company',       href: '/#company' },
-  { label: 'Contact Sales', href: '/#contact' },
+  { label: 'How it works', href: '/#how-it-works' },
+  { label: 'Why evidence', href: '/#why-vigilproof' },
+  { label: 'Safety', href: '/#safety' },
 ];
 
 export default function Navbar() {
@@ -107,7 +104,6 @@ export default function Navbar() {
           <nav
             aria-label="Primary navigation"
             style={{
-              display: 'flex',
               alignItems: 'center',
               gap: '2px',
             }}
@@ -145,7 +141,7 @@ export default function Navbar() {
           {/* ── Right auth actions (desktop) ── */}
           <div
             className="hidden lg:flex"
-            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px' }}
+            style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: '10px' }}
           >
             {isAuthenticated ? (
               <>
@@ -178,6 +174,8 @@ export default function Navbar() {
                 <div style={{ position: 'relative' }}>
                   <button
                     onClick={() => setDropdownOpen(!dropdownOpen)}
+                    aria-label="Account menu"
+                    aria-expanded={dropdownOpen}
                     style={{
                       width: 34, height: 34,
                       borderRadius: '50%',
@@ -314,10 +312,12 @@ export default function Navbar() {
           </div>
 
           {/* ── Mobile hamburger ── */}
-          <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }} className="lg:hidden">
+          <div style={{ flex: 1, justifyContent: 'flex-end' }} className="flex lg:hidden">
             <button
               id="navbar-mobile-toggle"
               aria-label="Toggle mobile menu"
+              aria-expanded={mobileOpen}
+              aria-controls="mobile-navigation"
               onClick={() => setMobileOpen(o => !o)}
               style={{
                 background: 'none',
@@ -350,6 +350,7 @@ export default function Navbar() {
       {/* ── Mobile menu ── */}
       {mobileOpen && (
         <motion.div
+          id="mobile-navigation"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}

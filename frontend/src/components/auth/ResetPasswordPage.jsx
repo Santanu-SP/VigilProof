@@ -6,11 +6,10 @@ import { humanizeAuthError } from '../../auth/cognitoClient';
 import AuthLayout, { AuthInput, AuthButton, AuthError, AuthSuccess } from './AuthLayout';
 
 const PASSWORD_RULES = [
-  { label: 'At least 8 characters',        test: (pw) => pw.length >= 8 },
+  { label: 'At least 10 characters',       test: (pw) => pw.length >= 10 },
   { label: 'One uppercase letter',         test: (pw) => /[A-Z]/.test(pw) },
   { label: 'One lowercase letter',         test: (pw) => /[a-z]/.test(pw) },
   { label: 'One number',                   test: (pw) => /\d/.test(pw) },
-  { label: 'One special character (!@#$)', test: (pw) => /[^A-Za-z0-9]/.test(pw) },
 ];
 
 export default function ResetPasswordPage() {
@@ -34,7 +33,7 @@ export default function ResetPasswordPage() {
     if (!email.trim()) errs.email = 'Email is required.';
     if (!code.trim()) errs.code = 'Code is required.';
     if (!password) errs.password = 'Password is required.';
-    else if (password.length < 8) errs.password = 'Password must be at least 8 characters.';
+    else if (!PASSWORD_RULES.every(rule => rule.test(password))) errs.password = 'Use at least 10 characters with uppercase, lowercase, and a number.';
     if (password !== confirmPw) errs.confirmPw = 'Passwords do not match.';
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;

@@ -37,9 +37,9 @@ const bentoItemVariants = {
 function DataPanel({ children, colSpan = 1, style = {} }) {
   return (
     <motion.div
+      className={colSpan === 2 ? 'result-grid-span-2' : undefined}
       variants={bentoItemVariants}
       style={{
-        gridColumn: `span ${colSpan}`,
         background: 'rgba(0,0,0,0.45)',
         border: '1px solid rgba(255,255,255,0.07)',
         borderRadius: 14,
@@ -106,6 +106,7 @@ function DataToken({ value, block = false }) {
           userSelect: 'none',
           width: block ? '100%' : undefined,
           boxSizing: 'border-box',
+          overflowWrap: 'anywhere',
         }}
       >
         {value}
@@ -198,9 +199,9 @@ export default function ResultView({ result, onReset }) {
 
       {/* ── Bento Grid Evidence ── */}
       <motion.div
+        className="result-evidence-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
           gap: 14,
         }}
         variants={bentoContainerVariants}
@@ -209,39 +210,36 @@ export default function ResultView({ result, onReset }) {
       >
         {/* Signal cards — each snaps in with stiffness:300, damping:20 */}
         {risk?.signals?.map((signal, idx) => {
-          let severity = 'warning';
-          let reason = 'Signal observed in content';
-          if (signal.toLowerCase().includes('urgency')) {
-            reason = 'Artificial urgency pressures victims to act quickly.';
-          } else if (signal.toLowerCase().includes('payment')) {
-            severity = 'threat';
-            reason = 'Direct requests for payment are a strong indicator of fraud.';
-          } else if (signal.toLowerCase().includes('link')) {
-            reason = 'Suspicious or hidden links attempt to steal credentials.';
-          }
-
+          const severity = ['OTP_REQUEST', 'PASSWORD_REQUEST', 'PAYMENT_REQUEST'].includes(signal.code)
+            ? 'threat'
+            : 'warning';
+          const observation = signal.source === 'URL'
+            ? 'URL analysis'
+            : signal.source === 'BROWSER'
+              ? 'Browser observation'
+              : 'Message content';
           const isFeatured = idx === 0 && risk.signals.length % 2 !== 0;
           return (
             <motion.div
-              key={`signal-${idx}`}
+              className={isFeatured ? 'result-grid-span-2' : undefined}
+              key={`${signal.code}-${idx}`}
               variants={bentoItemVariants}
-              style={{ gridColumn: isFeatured ? 'span 2' : 'span 1' }}
             >
               <EvidenceCard
-                signalName={signal}
-                observation="Found in message content"
-                reason={reason}
+                signalName={signal.title}
+                observation={observation}
+                reason={signal.detail}
                 severity={severity}
-                score={Math.floor(risk.evidenceScore / risk.signals.length) || 10}
+                score={signal.weight}
               />
             </motion.div>
           );
         })}
 
-        {/* Suspicious URLs panel */}
+        {/* URLs panel */}
         {evidence?.urls?.length > 0 && (
           <DataPanel colSpan={2}>
-            <PanelHeader icon={LinkIcon} label="Suspicious URLs" />
+            <PanelHeader icon={LinkIcon} label="Observed URLs" />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {evidence.urls.map((url, i) => (
                 <DataToken key={i} value={url} />
@@ -278,11 +276,12 @@ export default function ResultView({ result, onReset }) {
         {(evidence?.claimedOrganization ||
           evidence?.amounts?.length > 0 ||
           evidence?.asksForOtp ||
+          evidence?.asksForPassword ||
           evidence?.asksForPayment) && (
           <motion.div
+            className="result-grid-span-3"
             variants={bentoItemVariants}
             style={{
-              gridColumn: 'span 3',
               display: 'flex',
               flexWrap: 'wrap',
               gap: 8,
@@ -296,7 +295,10 @@ export default function ResultView({ result, onReset }) {
               <EntityChip label="Amount:" value={evidence.amounts.join(', ')} />
             )}
             {evidence.asksForOtp && (
-              <EntityChip label="Req:" value="OTP / Password" accent />
+              <EntityChip label="Req:" value="OTP" accent />
+            )}
+            {evidence.asksForPassword && (
+              <EntityChip label="Req:" value="Password" accent />
             )}
             {evidence.asksForPayment && (
               <EntityChip label="Req:" value="Payment" accent />

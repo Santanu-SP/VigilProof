@@ -5,7 +5,6 @@ import {
   makeAuthDetails,
   makeAttribute,
   isCognitoConfigured,
-  humanizeAuthError,
 } from './cognitoClient';
 
 const AuthContext = createContext(null);
@@ -19,11 +18,6 @@ export function useAuth() {
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);   // { email, name, sub, emailVerified }
   const [loading, setLoading] = useState(true);    // session restoration in progress
-
-  /* ── Session restoration on mount ────────────────────────────────────── */
-  useEffect(() => {
-    restoreSession();
-  }, []);
 
   function restoreSession() {
     const pool = getUserPool();
@@ -64,6 +58,10 @@ export function AuthProvider({ children }) {
     });
   }
 
+  useEffect(() => {
+    restoreSession();
+  }, []);
+
   /* ── Login ───────────────────────────────────────────────────────────── */
   const login = useCallback((email, password) => {
     return new Promise((resolve, reject) => {
@@ -75,7 +73,7 @@ export function AuthProvider({ children }) {
       const authDetails = makeAuthDetails(email, password);
 
       cognitoUser.authenticateUser(authDetails, {
-        onSuccess: (session) => {
+        onSuccess: () => {
           cognitoUser.getUserAttributes((err, attributes) => {
             const attrMap = {};
             if (!err && attributes) {
@@ -200,7 +198,7 @@ export function AuthProvider({ children }) {
 
   /* ── Get current JWT token ───────────────────────────────────────────── */
   const getAuthToken = useCallback(() => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const pool = getUserPool();
       if (!pool) return resolve(null);
 

@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Search, Database, Lock } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 /* ── Blinking cursor ─────────────────────────────────────────────────────────── */
 function BlinkCursor() {
+  const reducedMotion = useReducedMotion();
   return (
     <motion.span
-      animate={{ opacity: [1, 0, 1] }}
+      animate={reducedMotion ? undefined : { opacity: [1, 0, 1] }}
       transition={{ duration: 0.8, repeat: Infinity, ease: 'steps(1)' }}
       style={{
         display: 'inline-block',
@@ -25,14 +28,15 @@ function BlinkCursor() {
 /* ── Monospace spinner ───────────────────────────────────────────────────────── */
 function TerminalSpinner() {
   const [frame, setFrame] = useState(0);
-  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  const reducedMotion = useReducedMotion();
   useEffect(() => {
-    const id = setInterval(() => setFrame(f => (f + 1) % frames.length), 80);
+    if (reducedMotion) return undefined;
+    const id = setInterval(() => setFrame(f => (f + 1) % SPINNER_FRAMES.length), 80);
     return () => clearInterval(id);
-  }, []);
+  }, [reducedMotion]);
   return (
     <span style={{ color: '#22c55e', filter: 'drop-shadow(0 0 4px rgba(34,197,94,0.8))', fontFamily: 'monospace' }}>
-      {frames[frame]}
+      {reducedMotion ? '…' : SPINNER_FRAMES[frame]}
     </span>
   );
 }
@@ -171,7 +175,6 @@ export default function AnalysisProgress({ currentStage, statusMessage }) {
               const state = getStageState(stage.id);
               const isActive = state === 'active';
               const isCompleted = state === 'completed';
-              const isPending = state === 'pending';
 
               return (
                 <motion.div

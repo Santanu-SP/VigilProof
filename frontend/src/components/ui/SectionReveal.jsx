@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 
 /**
  * SectionReveal — shared scroll-triggered reveal wrapper.
@@ -50,14 +50,15 @@ export const itemVariants = {
  * `once: true` so animation only fires on first scroll-into-view.
  * `margin: "-80px"` so it triggers slightly before edge.
  */
-export function SectionReveal({ children, className, style, as: Tag = 'div', id }) {
+export function SectionReveal({ children, className, style, id }) {
+  const reduceMotion = useReducedMotion();
   return (
     <motion.div
       id={id}
       className={className}
       style={style}
       variants={containerVariants}
-      initial="hidden"
+      initial={reduceMotion ? false : 'hidden'}
       whileInView="visible"
       viewport={{ once: true, margin: '-80px' }}
     >

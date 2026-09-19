@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, Suspense, lazy } from 'react';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { createCase, uploadEvidence, startAnalysis, getCase } from './services/api';
 
@@ -7,7 +7,7 @@ import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import { SmoothScroll } from './components/layout/SmoothScroll';
 import { PageTransition } from './components/layout/PageTransition';
-import { Skeleton, HeroSkeleton, SectionSkeleton, ResultSkeleton, ProgressSkeleton } from './components/ui/Skeleton';
+import { HeroSkeleton, SectionSkeleton, ResultSkeleton, ProgressSkeleton } from './components/ui/Skeleton';
 
 // Auth and Protected Routes
 import ProtectedRoute from './auth/ProtectedRoute';
@@ -38,6 +38,7 @@ function InvestigationFlow() {
   const [stage, setStage] = useState('HOME'); // HOME, UPLOADING, PROCESSING, RESULT
   const [statusMessage, setStatusMessage] = useState('');
   const [result, setResult] = useState(null);
+  const [savedCaseId, setSavedCaseId] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
   const pollIntervalRef = useRef(null);
@@ -56,8 +57,8 @@ function InvestigationFlow() {
     setError(null);
     if (!selectedFile) return false;
 
-    if (!selectedFile.type.startsWith('image/')) {
-      setError('Unsupported file type. Please upload an image.');
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(selectedFile.type)) {
+      setError('Choose a PNG, JPEG, WebP, or GIF screenshot.');
       return false;
     }
 
@@ -156,11 +157,13 @@ function InvestigationFlow() {
 
     try {
       setError(null);
+      setSavedCaseId(null);
       setStage('UPLOADING');
       setStatusMessage('UPLOADING');
 
       // 1. Create Case
       const { caseId, uploadUrl } = await createCase();
+      setSavedCaseId(caseId);
 
       // 2. Upload Evidence
       await uploadEvidence(uploadUrl, file);
@@ -193,6 +196,7 @@ function InvestigationFlow() {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     setFile(null);
     setResult(null);
+    setSavedCaseId(null);
     setError(null);
     setStage('HOME');
     if (fileInputRef.current) {
@@ -207,9 +211,10 @@ function InvestigationFlow() {
   return (
     <>
       {error && (
-        <div className="max-w-7xl mx-auto w-full px-6 mt-20 absolute top-0 left-0 right-0 z-50">
-          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', padding: '12px 16px', borderRadius: '8px' }}>
-            <span className="font-mono text-sm">{error}</span>
+        <div className="max-w-3xl mx-auto w-full px-6 pt-20 relative z-20" role="alert">
+          <div style={{ background: 'rgba(172,110,39,0.12)', border: '1px solid rgba(232,174,84,0.36)', color: '#f3d6a7', padding: '16px 20px', borderRadius: '10px' }}>
+            <span className="text-sm">{error}</span>
+            {savedCaseId && <p className="text-xs mt-2 text-white/60">Case reference: <code>{savedCaseId}</code>. No result was produced.</p>}
           </div>
         </div>
       )}
@@ -219,9 +224,11 @@ function InvestigationFlow() {
           <PageTransition keyProp="upload">
             <div style={{ padding: '120px 24px 60px', minHeight: '100vh', display: 'flex', justifyContent: 'center' }}>
               <div style={{ width: '100%', maxWidth: '680px' }}>
-                <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '24px', textAlign: 'center' }}>
-                  Start Investigation
-                </h1>
+                <div className="text-center mb-8">
+                  <p className="font-mono text-xs uppercase tracking-[.22em] text-emerald-300/70 mb-3">Secure evidence workspace</p>
+                  <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3rem)', fontWeight: 800, marginBottom: '12px' }}>Start an investigation</h1>
+                  <p className="text-white/55 max-w-xl mx-auto">Add a screenshot to a private case. Observable evidence stays separate from the final risk assessment.</p>
+                </div>
                 <Suspense fallback={<HeroSkeleton />}>
                   <UploadPanel {...uploadProps} />
                 </Suspense>
@@ -251,23 +258,6 @@ function InvestigationFlow() {
 }
 
 function LandingPage() {
-  const navigate = useNavigate();
-
-  // In the landing page, "Start Free" takes them to investigate (which prompts login if needed)
-  useEffect(() => {
-    const handleStartFree = (e) => {
-      e.preventDefault();
-      navigate('/investigate');
-    };
-
-    // Attach listener to the CTA
-    const cta = document.getElementById('cta-start-free');
-    if (cta) {
-      cta.addEventListener('click', handleStartFree);
-      return () => cta.removeEventListener('click', handleStartFree);
-    }
-  }, [navigate]);
-
   return (
     <PageTransition keyProp="home">
       <Suspense fallback={<HeroSkeleton />}>
@@ -313,6 +303,7 @@ function App() {
             {/* Protected Routes */}
             <Route path="/investigate" element={<ProtectedRoute><InvestigationFlow /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+            <Route path="*" element={<div className="min-h-[70vh] flex flex-col items-center justify-center px-6 text-center"><h1 className="text-4xl font-bold mb-3">Page not found</h1><p className="text-white/55 mb-6">This route does not exist.</p><a href="/" className="text-green-400 underline underline-offset-4">Return to VigilProof</a></div>} />
           </Routes>
         </main>
 

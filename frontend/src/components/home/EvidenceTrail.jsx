@@ -2,45 +2,6 @@ import React, { useRef } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { SectionReveal, RevealItem } from '../ui/SectionReveal';
 
-const TRAIL_STEPS = [
-  {
-    label: 'Suspicious Screenshot',
-    tag: 'Input',
-    color: 'rgba(255,255,255,0.08)',
-    border: 'rgba(255,255,255,0.12)',
-    tagColor: 'rgba(255,255,255,0.3)',
-    items: null,
-  },
-  {
-    label: null,
-    tag: 'Extraction',
-    color: null,
-    border: null,
-    tagColor: '#22c55e',
-    items: ['Extracted Text', 'URLs', 'Entities'],
-  },
-  {
-    label: null,
-    tag: 'Risk Signals',
-    color: null,
-    border: null,
-    tagColor: '#fbbf24',
-    items: [
-      { text: 'Urgency', color: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)', textColor: '#fbbf24' },
-      { text: 'Payment Link', color: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.3)', textColor: '#f87171' },
-      { text: 'Unknown Sender', color: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)', textColor: '#fbbf24' },
-    ],
-  },
-  {
-    label: 'High Risk Evidence',
-    tag: 'Result',
-    color: 'rgba(239,68,68,0.08)',
-    border: 'rgba(239,68,68,0.25)',
-    tagColor: '#f87171',
-    items: null,
-  },
-];
-
 export default function EvidenceTrail() {
   const containerRef = useRef(null);
   const { scrollYProgress } = useScroll({

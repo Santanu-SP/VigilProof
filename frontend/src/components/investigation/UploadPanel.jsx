@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, FileImage, X, Search, Target, ArrowRight } from 'lucide-react';
-import { motion, AnimatePresence, useSpring } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const MagneticButton = ({ onClick, children }) => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -18,10 +18,6 @@ const MagneticButton = ({ onClick, children }) => {
   const reset = () => {
     setPosition({ x: 0, y: 0 });
   };
-
-  const springConfig = { damping: 15, stiffness: 150, mass: 0.1 };
-  const x = useSpring(position.x, springConfig);
-  const y = useSpring(position.y, springConfig);
 
   return (
     <motion.button
@@ -148,7 +144,7 @@ export default function UploadPanel({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/webp,image/gif"
               onChange={handleChange}
               className="hidden"
             />

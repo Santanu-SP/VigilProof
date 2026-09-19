@@ -19,7 +19,7 @@ const STEPS = [
     icon: ShieldAlert,
     step: '03',
     title: 'Inspect URLs safely',
-    description: 'Suspicious links are loaded in a controlled environment, looking for credential forms.',
+    description: 'The browser investigator is designed to inspect links without submitting forms; cloud availability is pending.',
   },
   {
     icon: CheckCircle2,
