@@ -16,14 +16,14 @@ export default function Footer() {
               Evidence-first investigation of suspicious digital messages.
             </p>
           </div>
-          
+
           <div className="flex gap-6">
             <Link to="/#how-it-works" className="text-sm text-white/40 hover:text-white font-mono transition-colors">How it works</Link>
             <Link to="/#safety" className="text-sm text-white/40 hover:text-white font-mono transition-colors">Safety</Link>
             <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="text-sm text-white/40 hover:text-white font-mono transition-colors">GitHub</a>
           </div>
         </div>
-        
+
         <div className="border-t border-white/5 pt-8">
           <p className="text-xs text-white/30 font-mono uppercase tracking-wider text-center md:text-left">
             VigilProof provides evidence-based indicators and does not replace official law-enforcement, banking, or cybersecurity advice.

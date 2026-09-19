@@ -174,7 +174,7 @@ export default function Navbar() {
                 >
                   Investigate
                 </Link>
-                
+
                 <div style={{ position: 'relative' }}>
                   <button
                     onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -390,7 +390,7 @@ export default function Navbar() {
               {label}
             </motion.a>
           ))}
-          
+
           <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {isAuthenticated ? (
               <>

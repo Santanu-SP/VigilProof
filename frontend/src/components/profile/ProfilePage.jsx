@@ -102,7 +102,7 @@ export default function ProfilePage() {
 
             {/* User Info */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              
+
               {/* Display Name */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontFamily: 'monospace', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
@@ -168,7 +168,7 @@ export default function ProfilePage() {
 
             </div>
           </div>
-          
+
           {/* Footer Actions */}
           <div style={{ padding: '20px 32px', background: 'rgba(0,0,0,0.4)', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'flex-end' }}>
             <motion.button

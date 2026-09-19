@@ -63,7 +63,7 @@ export async function uploadEvidence(uploadUrl, file) {
   }
 
   // Pre-signed S3 URLs usually don't want the Authorization header meant for our API,
-  // but if this is an API route, fetchWithAuth would be used. 
+  // but if this is an API route, fetchWithAuth would be used.
   // Assuming uploadUrl is a direct S3 pre-signed URL, we use raw fetch.
   const response = await fetch(uploadUrl, {
     method: 'PUT',

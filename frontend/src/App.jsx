@@ -259,7 +259,7 @@ function LandingPage() {
       e.preventDefault();
       navigate('/investigate');
     };
-    
+
     // Attach listener to the CTA
     const cta = document.getElementById('cta-start-free');
     if (cta) {
@@ -302,14 +302,14 @@ function App() {
         <main className="flex-grow flex flex-col relative z-10">
           <Routes>
             <Route path="/" element={<LandingPage />} />
-            
+
             {/* Auth Routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
-            
+
             {/* Protected Routes */}
             <Route path="/investigate" element={<ProtectedRoute><InvestigationFlow /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
