@@ -1,7 +1,7 @@
 import { mockCreateCase, mockStartAnalysis, mockGetCase } from '../mocks/apiMocks.js';
 import { getUserPool } from '../auth/cognitoClient';
 
-const getBaseUrl = () => import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const getBaseUrl = () => (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const isMockMode = import.meta.env.VITE_USE_MOCK_API === 'true';
 
 /** Retrieves current JWT from Cognito if session is valid */

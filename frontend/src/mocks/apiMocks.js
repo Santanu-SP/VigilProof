@@ -6,11 +6,11 @@ let mockCases = {};
 export async function mockCreateCase() {
   await new Promise(resolve => setTimeout(resolve, 800));
   const caseId = `mock-case-${Date.now()}`;
-  const uploadUrl = `https://mock-s3-url.com/upload/${caseId}`;
-  
+  const uploadUrl = `https://mock-upload.invalid/${caseId}`;
+
   mockCases[caseId] = {
     id: caseId,
-    status: 'created'
+    status: 'CREATED'
   };
 
   return { caseId, uploadUrl };
@@ -18,39 +18,47 @@ export async function mockCreateCase() {
 
 export async function mockStartAnalysis(caseId) {
   await new Promise(resolve => setTimeout(resolve, 800));
-  
+
   if (!mockCases[caseId]) {
     throw new Error('Case not found');
   }
 
-  mockCases[caseId].status = 'analyzing';
-  
-  // Simulate processing stages
-  setTimeout(() => {
-    if (mockCases[caseId]) mockCases[caseId].status = 'extracting_evidence';
-  }, 2000);
-  
+  mockCases[caseId].status = 'PROCESSING';
+
   setTimeout(() => {
     if (mockCases[caseId]) {
-      mockCases[caseId].status = 'completed';
-      mockCases[caseId].result = {
-        risk: {
-          level: 'HIGH',
-          evidenceScore: 85,
-          signals: ['Urgency indicator detected', 'Suspicious link format', 'Request for payment']
-        },
-        evidence: {
-          claimedOrganization: 'Fake Bank Corp',
-          urls: ['http://secure-login-update-now.com'],
-          phoneNumbers: ['+1-800-555-0199'],
-          upiIds: ['fake-payment@upi'],
-          amounts: ['$500.00'],
-          asksForPayment: true,
-          asksForOtp: false,
-          asksForPassword: true,
-          threatLanguage: false,
-          urgencyLanguage: true
-        }
+      mockCases[caseId].status = 'COMPLETED';
+      mockCases[caseId].risk = {
+        level: 'MODERATE',
+        evidenceScore: 30,
+        signals: [
+          {
+            code: 'URGENCY_LANGUAGE',
+            title: 'Urgency language detected',
+            weight: 10,
+            detail: 'The message pressures the recipient to act quickly.',
+            source: 'MESSAGE'
+          },
+          {
+            code: 'PAYMENT_REQUEST',
+            title: 'Payment requested',
+            weight: 20,
+            detail: 'The message asks the recipient to make a payment.',
+            source: 'MESSAGE'
+          }
+        ]
+      };
+      mockCases[caseId].evidence = {
+        claimedOrganization: 'Example Bank',
+        urls: ['https://suspicious.example'],
+        phoneNumbers: ['+1-800-555-0199'],
+        upiIds: ['example@upi'],
+        amounts: ['$500.00'],
+        asksForPayment: true,
+        asksForOtp: false,
+        asksForPassword: true,
+        threatLanguage: [],
+        urgencyLanguage: ['Act now']
       };
     }
   }, 5000);
@@ -60,7 +68,7 @@ export async function mockStartAnalysis(caseId) {
 
 export async function mockGetCase(caseId) {
   await new Promise(resolve => setTimeout(resolve, 400));
-  
+
   const mockCase = mockCases[caseId];
   if (!mockCase) {
     throw new Error('Case not found');

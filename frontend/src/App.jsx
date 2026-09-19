@@ -55,17 +55,17 @@ function InvestigationFlow() {
   const validateFile = (selectedFile) => {
     setError(null);
     if (!selectedFile) return false;
-    
+
     if (!selectedFile.type.startsWith('image/')) {
       setError('Unsupported file type. Please upload an image.');
       return false;
     }
-    
+
     if (selectedFile.size > MAX_FILE_SIZE) {
       setError('File is too large. Maximum size is 10MB.');
       return false;
     }
-    
+
     return true;
   };
 
@@ -73,7 +73,7 @@ function InvestigationFlow() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0];
       if (validateFile(droppedFile)) {
@@ -100,6 +100,14 @@ function InvestigationFlow() {
     }
   };
 
+  const showCompletedCase = (caseData) => {
+    setResult({
+      evidence: caseData.evidence ?? null,
+      risk: caseData.risk ?? null,
+    });
+    setStage('RESULT');
+  };
+
   const startPolling = (caseId) => {
     let attempts = 0;
     const maxAttempts = 60; // 2 minutes with 2s interval
@@ -115,26 +123,24 @@ function InvestigationFlow() {
         }
 
         const caseData = await getCase(caseId);
-        
-        if (caseData.status === 'completed') {
+
+        if (caseData.status === 'COMPLETED') {
           clearInterval(pollIntervalRef.current);
-          setResult(caseData.result);
-          setStage('RESULT');
-        } else if (caseData.status === 'failed') {
+          showCompletedCase(caseData);
+        } else if (caseData.status === 'FAILED') {
           clearInterval(pollIntervalRef.current);
-          setError('Analysis failed. The message could not be processed.');
+          const backendError = typeof caseData.error === 'string'
+            ? caseData.error
+            : caseData.error?.message;
+          setError(backendError || 'Analysis failed. The message could not be processed.');
           setStage('HOME');
-        } else if (caseData.status === 'extracting_evidence') {
-          setStatusMessage('extracting_evidence');
-        } else if (caseData.status === 'checking_indicators') {
-          setStatusMessage('checking_indicators');
-        } else if (caseData.status === 'preparing_result') {
-          setStatusMessage('preparing_result');
         } else {
-          setStatusMessage('Reading screenshot...');
+          setStatusMessage('extracting_evidence');
         }
       } catch (err) {
-        // Log silently or handle network error during polling
+        clearInterval(pollIntervalRef.current);
+        setError(err.message || 'Unable to retrieve the analysis result.');
+        setStage('HOME');
       }
     }, 2000);
   };
@@ -147,7 +153,7 @@ function InvestigationFlow() {
 
   const handleInspect = async () => {
     if (!file) return;
-    
+
     try {
       setError(null);
       setStage('UPLOADING');
@@ -162,10 +168,20 @@ function InvestigationFlow() {
       // 3. Start Analysis
       setStage('PROCESSING');
       setStatusMessage('extracting_evidence');
-      await startAnalysis(caseId);
+      const analysis = await startAnalysis(caseId);
 
-      // 4. Poll for result
-      startPolling(caseId);
+      // The local Case API currently completes synchronously, while a deployed
+      // implementation may acknowledge processing and require polling.
+      if (analysis.status === 'COMPLETED') {
+        showCompletedCase(analysis);
+      } else if (analysis.status === 'FAILED') {
+        const backendError = typeof analysis.error === 'string'
+          ? analysis.error
+          : analysis.error?.message;
+        throw new Error(backendError || 'Analysis failed.');
+      } else {
+        startPolling(caseId);
+      }
 
     } catch (err) {
       setError(err.message || 'An unexpected error occurred.');
@@ -174,6 +190,7 @@ function InvestigationFlow() {
   };
 
   const resetFlow = () => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     setFile(null);
     setResult(null);
     setError(null);

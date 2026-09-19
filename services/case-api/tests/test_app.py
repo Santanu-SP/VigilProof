@@ -2,6 +2,7 @@ import os
 import json
 import pytest
 import boto3
+import sys
 from moto import mock_aws
 
 # Set up test environment variables before importing app
@@ -67,18 +68,19 @@ def test_create_case(dynamodb, s3):
     
     assert response['statusCode'] == 201
     body = json.loads(response['body'])
-    
+
     assert 'caseId' in body
     assert body['status'] == 'CREATED'
     assert 'uploadUrl' in body
     assert 'test-evidence-bucket.s3.amazonaws.com/cases/' in body['uploadUrl']
     assert body['objectKey'] == f"cases/{body['caseId']}/input"
-    
+
     # Verify persistence
     table = dynamodb.Table('test-cases-table')
     item = table.get_item(Key={'caseId': body['caseId']})['Item']
-    
+
     assert item['caseId'] == body['caseId']
+    assert item['ownerSub'] == 'user123'
     assert item['status'] == 'CREATED'
     assert 'createdAt' in item
     assert 'expireAt' in item
@@ -91,7 +93,7 @@ def test_get_existing_case(dynamodb, s3):
     # Then get it
     get_response = get_case_handler({'pathParameters': {'caseId': case_id}}, {})
     assert get_response['statusCode'] == 200
-    
+
     body = json.loads(get_response['body'])
     assert body['caseId'] == case_id
     assert body['status'] == 'CREATED'
@@ -100,14 +102,30 @@ def test_get_existing_case(dynamodb, s3):
     assert 'risk' in body
     assert body['error'] is None
 
+def test_get_forbidden_case(dynamodb, s3):
+    create_response = create_case_handler(auth_event(sub="owner-sub"), {})
+    case_id = json.loads(create_response['body'])['caseId']
+
+    get_response = get_case_handler(auth_event(sub="hacker-sub", pathParameters={'caseId': case_id}), {})
+    assert get_response['statusCode'] == 403
+
+def test_legacy_ownerless_case(dynamodb):
+    # Manually insert legacy case
+    table = dynamodb.Table('test-cases-table')
+    legacy_id = '123e4567-e89b-12d3-a456-426614174000'
+    table.put_item(Item={'caseId': legacy_id, 'status': 'CREATED'})
+
+    get_response = get_case_handler(auth_event(sub="some-user", pathParameters={'caseId': legacy_id}), {})
+    assert get_response['statusCode'] == 403
+
 def test_get_missing_case(dynamodb):
-    get_response = get_case_handler({'pathParameters': {'caseId': '123e4567-e89b-12d3-a456-426614174000'}}, {})
+    get_response = get_case_handler(auth_event(pathParameters={'caseId': '123e4567-e89b-12d3-a456-426614174000'}), {})
     assert get_response['statusCode'] == 404
     body = json.loads(get_response['body'])
     assert body['error'] == 'Case not found'
 
 def test_malformed_case_id(dynamodb):
-    get_response = get_case_handler({'pathParameters': {'caseId': 'not-a-uuid'}}, {})
+    get_response = get_case_handler(auth_event(pathParameters={'caseId': 'not-a-uuid'}), {})
     assert get_response['statusCode'] == 400
     
     analyze_response = analyze_case_handler({'pathParameters': {'caseId': 'not-a-uuid'}}, {})

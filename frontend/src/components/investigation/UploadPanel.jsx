@@ -65,15 +65,15 @@ const MagneticButton = ({ onClick, children }) => {
   );
 };
 
-export default function UploadPanel({ 
-  file, 
-  dragActive, 
-  handleDrag, 
-  handleDrop, 
-  handleChange, 
-  handleRemoveFile, 
-  handleInspect, 
-  fileInputRef 
+export default function UploadPanel({
+  file,
+  dragActive,
+  handleDrag,
+  handleDrop,
+  handleChange,
+  handleRemoveFile,
+  handleInspect,
+  fileInputRef
 }) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -239,8 +239,8 @@ export default function UploadPanel({
                   </span>
                 </div>
               </div>
-              <button
-                style={{ color: 'rgba(255,255,255,0.3)', background: 'none', border: 'none', cursor: 'pointer', padding: 6, transition: 'color 0.15s' }}
+              <button 
+                className="text-slate-400 hover:text-slate-900 transition-colors p-2" 
                 onClick={handleRemoveFile}
                 aria-label="Remove file"
                 onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; }}
@@ -249,9 +249,12 @@ export default function UploadPanel({
                 <X size={17} />
               </button>
             </div>
-
-            <MagneticButton onClick={handleInspect}>
-              <Search size={17} />
+            
+            <button 
+              className="w-full bg-slate-900 hover:bg-slate-800 text-slate-50 font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors" 
+              onClick={handleInspect}
+            >
+              <Search size={18} />
               Inspect evidence
               <ArrowRight size={17} style={{ position: 'absolute', right: 16, opacity: 0, transform: 'translateX(-8px)', transition: 'all 0.25s' }} className="group-hover:opacity-100 group-hover:translate-x-0" />
             </MagneticButton>
