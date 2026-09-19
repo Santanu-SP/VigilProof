@@ -23,6 +23,11 @@ from app import (
 )
 
 
+@pytest.fixture(autouse=True)
+def bedrock_enabled_for_extractor_tests(monkeypatch):
+    monkeypatch.setattr('app.BEDROCK_ENABLED', True)
+
+
 def auth_event(sub="test-user", **kwargs):
     event = {
         "requestContext": {
@@ -225,6 +230,18 @@ def test_analyze_missing_evidence(dynamodb, s3):
     assert analyze_response['statusCode'] == 400
     body = json.loads(analyze_response['body'])
     assert body['error'] == 'Evidence not uploaded yet'
+
+
+def test_analysis_is_unavailable_when_bedrock_is_disabled(dynamodb, s3, monkeypatch):
+    monkeypatch.setattr('app.BEDROCK_ENABLED', False)
+    create_response = create_case_handler(auth_event(), {})
+    case_id = json.loads(create_response['body'])['caseId']
+    s3.put_object(Bucket='test-evidence-bucket', Key=f"cases/{case_id}/input", Body=b'dummy')
+
+    response = analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})
+
+    assert response['statusCode'] == 503
+    assert json.loads(response['body'])['code'] == 'AI_PROVIDER_UNAVAILABLE'
 
 @patch('app.lambda_client.invoke')
 def test_analyze_extractor_exception(mock_invoke, dynamodb, s3):

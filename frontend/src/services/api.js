@@ -88,6 +88,10 @@ export async function startAnalysis(caseId) {
   });
 
   if (!response.ok) {
+    if (response.status === 503) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || 'Evidence analysis is temporarily unavailable.');
+    }
     throw new Error('Analysis failed to start.');
   }
 

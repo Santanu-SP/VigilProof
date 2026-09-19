@@ -42,6 +42,7 @@ AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 EVIDENCE_BUCKET = os.environ.get('EVIDENCE_BUCKET')
 CASES_TABLE = os.environ.get('CASES_TABLE')
 AI_EXTRACTOR_FUNCTION_NAME = os.environ.get('AI_EXTRACTOR_FUNCTION_NAME')
+BEDROCK_ENABLED = os.environ.get('BEDROCK_ENABLED', 'false').lower() == 'true'
 
 if not EVIDENCE_BUCKET or not CASES_TABLE:
     logger.warning("Missing required environment variables (EVIDENCE_BUCKET, CASES_TABLE)")
@@ -64,6 +65,10 @@ def _build_response(status_code, body):
         },
         "body": json.dumps(body)
     }
+
+
+def health_handler(event, context):
+    return _build_response(200, {"status": "ok"})
 
 def _validate_uuid(val):
     try:
@@ -201,6 +206,12 @@ def analyze_case_handler(event, context):
             if e.response['Error']['Code'] == '404':
                 return _build_response(400, {"error": "Evidence not uploaded yet"})
             raise
+
+        if not BEDROCK_ENABLED:
+            return _build_response(503, {
+                "code": "AI_PROVIDER_UNAVAILABLE",
+                "error": "Evidence analysis is temporarily unavailable.",
+            })
 
         table.update_item(
             Key={'caseId': case_id},
