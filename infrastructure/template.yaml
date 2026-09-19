@@ -4,8 +4,8 @@ Description: VigilProof Day-1 AWS foundation
 Parameters:
   NovaModelId:
     Type: String
-    Description: Amazon Nova foundation model ID available in the deployment region
-    Default: amazon.nova-lite-v1:0
+    Description: Amazon Nova 2 Lite inference profile ID used from the deployment region
+    Default: global.amazon.nova-2-lite-v1:0
 
 Resources:
   EvidenceBucket:
@@ -98,7 +98,10 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                   - bedrock:InvokeModelWithResponseStream
-                Resource: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/${NovaModelId}"
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${NovaModelId}"
+                  - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.nova-2-lite-v1:0"
+                  - !Sub "arn:${AWS::Partition}:bedrock:::foundation-model/amazon.nova-2-lite-v1:0"
               - Sid: ManageBuiltInBrowserSessions
                 Effect: Allow
                 Action:

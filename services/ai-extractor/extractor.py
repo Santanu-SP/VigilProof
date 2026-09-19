@@ -171,7 +171,7 @@ def extract_evidence(image_s3_uri: str) -> Evidence:
     if not image_s3_uri:
         raise ExtractionError("Missing imageS3Uri")
 
-    model_id = os.environ.get("NOVA_MODEL_ID", "amazon.nova-lite-v1:0")
+    model_id = os.environ.get("NOVA_MODEL_ID", "global.amazon.nova-2-lite-v1:0")
 
     image_bytes, image_format = _download_image_bytes(image_s3_uri)
     bedrock = get_bedrock_client()

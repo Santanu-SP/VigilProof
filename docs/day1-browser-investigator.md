@@ -31,7 +31,7 @@ CloudWatch log group, and Lambda execution role:
 
 ```bash
 export AWS_REGION=ap-south-1
-export NOVA_MODEL_ID=amazon.nova-lite-v1:0
+export NOVA_MODEL_ID=global.amazon.nova-2-lite-v1:0
 ./scripts/deploy-day1-infrastructure.sh
 ```
 

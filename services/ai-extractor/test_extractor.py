@@ -7,7 +7,8 @@ from extractor import extract_evidence, handler, Evidence, ExtractionError, pars
 
 @patch('extractor.get_s3_client')
 @patch('extractor.get_bedrock_client')
-def test_extract_evidence_success(mock_bedrock, mock_s3):
+def test_extract_evidence_success(mock_bedrock, mock_s3, monkeypatch):
+    monkeypatch.delenv('NOVA_MODEL_ID', raising=False)
     mock_s3_instance = MagicMock()
     mock_s3.return_value = mock_s3_instance
     mock_s3_instance.get_object.return_value = {
@@ -43,6 +44,28 @@ def test_extract_evidence_success(mock_bedrock, mock_s3):
     assert evidence.asksForPayment is True
     assert evidence.claimedOrganization is None
     assert evidence.phoneNumbers == []
+    assert mock_bedrock_instance.converse.call_args.kwargs['modelId'] == 'global.amazon.nova-2-lite-v1:0'
+
+
+@patch('extractor.get_s3_client')
+@patch('extractor.get_bedrock_client')
+def test_extract_evidence_uses_configured_model_id(mock_bedrock, mock_s3, monkeypatch):
+    monkeypatch.setenv('NOVA_MODEL_ID', 'us.amazon.nova-2-lite-v1:0')
+    mock_s3_instance = MagicMock()
+    mock_s3.return_value = mock_s3_instance
+    mock_s3_instance.get_object.return_value = {
+        'Body': MagicMock(read=lambda: b'fake-image-bytes'),
+        'ContentType': 'image/jpeg',
+    }
+    mock_bedrock_instance = MagicMock()
+    mock_bedrock.return_value = mock_bedrock_instance
+    mock_bedrock_instance.converse.return_value = {
+        'output': {'message': {'content': [{'toolUse': {'name': 'extract_evidence', 'input': {}}}]}}
+    }
+
+    extract_evidence('s3://test-bucket/test-key.jpg')
+
+    assert mock_bedrock_instance.converse.call_args.kwargs['modelId'] == 'us.amazon.nova-2-lite-v1:0'
 
 def test_parse_minimal_empty_evidence():
     content = [{"toolUse": {"name": "extract_evidence", "input": {}}}]

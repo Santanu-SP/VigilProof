@@ -3,7 +3,7 @@ set -euo pipefail
 
 region="${AWS_REGION:-ap-south-1}"
 stack_name="${STACK_NAME:-vigilproof-day1}"
-model_id="${NOVA_MODEL_ID:-amazon.nova-lite-v1:0}"
+model_id="${NOVA_MODEL_ID:-global.amazon.nova-2-lite-v1:0}"
 
 aws cloudformation deploy \
   --region "$region" \
