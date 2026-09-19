@@ -41,14 +41,14 @@ def test_extract_evidence_success(mock_bedrock, mock_s3):
     assert evidence.messageText == "Dear user, pay us immediately."
     assert evidence.urls == ["http://scam.com"]
     assert evidence.asksForPayment is True
-    assert evidence.claimedOrganization == ""
+    assert evidence.claimedOrganization is None
     assert evidence.phoneNumbers == []
 
 def test_parse_minimal_empty_evidence():
     content = [{"toolUse": {"name": "extract_evidence", "input": {}}}]
     evidence = parse_model_response(content)
     assert evidence.messageText == ""
-    assert evidence.claimedOrganization == ""
+    assert evidence.claimedOrganization is None
     assert evidence.urls == []
     assert evidence.asksForPayment is False
 
@@ -194,3 +194,36 @@ def test_handler_missing_uri():
     body = json.loads(result["body"])
     assert "error" in body
     assert "Missing imageS3Uri in event" in body["error"]
+
+def test_benign_message():
+    content = [{"toolUse": {"name": "extract_evidence", "input": {
+        "messageText": "Your order has been shipped and will arrive tomorrow."
+    }}}]
+    evidence = parse_model_response(content)
+    assert evidence.messageText == "Your order has been shipped and will arrive tomorrow."
+    assert evidence.asksForPayment is False
+    assert evidence.asksForOtp is False
+    assert evidence.asksForPassword is False
+
+def test_explicit_otp_and_password_request():
+    content = [{"toolUse": {"name": "extract_evidence", "input": {
+        "messageText": "Enter OTP and Password",
+        "asksForOtp": True,
+        "asksForPassword": True
+    }}}]
+    evidence = parse_model_response(content)
+    assert evidence.asksForOtp is True
+    assert evidence.asksForPassword is True
+
+def test_extra_unexpected_fields():
+    content = [{"toolUse": {"name": "extract_evidence", "input": {
+        "messageText": "Hello",
+        "fraudProbability": 0.99,
+        "riskScore": "HIGH",
+        "isScam": True
+    }}}]
+    evidence = parse_model_response(content)
+    assert evidence.messageText == "Hello"
+    assert not hasattr(evidence, 'fraudProbability')
+    assert not hasattr(evidence, 'riskScore')
+    assert not hasattr(evidence, 'isScam')

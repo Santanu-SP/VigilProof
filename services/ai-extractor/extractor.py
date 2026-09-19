@@ -2,7 +2,7 @@ import os
 import json
 import re
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import boto3
@@ -13,7 +13,7 @@ logger.setLevel(logging.INFO)
 
 class Evidence(BaseModel):
     messageText: str = ""
-    claimedOrganization: str = ""
+    claimedOrganization: Optional[str] = None
     urls: List[str] = Field(default_factory=list)
     phoneNumbers: List[str] = Field(default_factory=list)
     upiIds: List[str] = Field(default_factory=list)
@@ -44,7 +44,7 @@ class Evidence(BaseModel):
     @field_validator('claimedOrganization', mode='before')
     def clean_org(cls, v):
         if not v or not str(v).strip():
-            return ""
+            return None
         return str(v).strip()
 
     @field_validator('urls', 'phoneNumbers', 'upiIds', 'amounts', 'threatLanguage', 'urgencyLanguage', mode='before')
