@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, Suspense, lazy } from 'react';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { createCase, uploadEvidence, startAnalysis, getCase } from './services/api';
 
@@ -6,9 +7,16 @@ import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import { SmoothScroll } from './components/layout/SmoothScroll';
 import { PageTransition } from './components/layout/PageTransition';
-import { Skeleton } from './components/ui/Skeleton';
+import { Skeleton, HeroSkeleton, SectionSkeleton, ResultSkeleton, ProgressSkeleton } from './components/ui/Skeleton';
 
-import './App.css';
+// Auth and Protected Routes
+import ProtectedRoute from './auth/ProtectedRoute';
+import LoginPage from './components/auth/LoginPage';
+import RegisterPage from './components/auth/RegisterPage';
+import VerifyEmailPage from './components/auth/VerifyEmailPage';
+import ForgotPasswordPage from './components/auth/ForgotPasswordPage';
+import ResetPasswordPage from './components/auth/ResetPasswordPage';
+import ProfilePage from './components/profile/ProfilePage';
 
 // Lazy loaded sections
 const Hero = lazy(() => import('./components/home/Hero'));
@@ -24,7 +32,7 @@ const ResultView = lazy(() => import('./components/ResultView'));
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-function App() {
+function InvestigationFlow() {
   const [file, setFile] = useState(null);
   const [error, setError] = useState(null);
   const [stage, setStage] = useState('HOME'); // HOME, UPLOADING, PROCESSING, RESULT
@@ -197,53 +205,115 @@ function App() {
   };
 
   return (
-    <SmoothScroll>
-      <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-slate-900 selection:text-slate-50">
-        <Navbar />
+    <>
+      {error && (
+        <div className="max-w-7xl mx-auto w-full px-6 mt-20 absolute top-0 left-0 right-0 z-50">
+          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', padding: '12px 16px', borderRadius: '8px' }}>
+            <span className="font-mono text-sm">{error}</span>
+          </div>
+        </div>
+      )}
 
-        <main className="flex-grow flex flex-col relative z-10 pt-20">
-          {error && (
-            <div className="max-w-7xl mx-auto w-full px-6 mt-8">
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
-                <span className="font-mono text-sm">{error}</span>
+      <AnimatePresence mode="wait">
+        {stage === 'HOME' && (
+          <PageTransition keyProp="upload">
+            <div style={{ padding: '120px 24px 60px', minHeight: '100vh', display: 'flex', justifyContent: 'center' }}>
+              <div style={{ width: '100%', maxWidth: '680px' }}>
+                <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '24px', textAlign: 'center' }}>
+                  Start Investigation
+                </h1>
+                <Suspense fallback={<HeroSkeleton />}>
+                  <UploadPanel {...uploadProps} />
+                </Suspense>
               </div>
             </div>
-          )}
+          </PageTransition>
+        )}
 
-          <AnimatePresence mode="wait">
-            {stage === 'HOME' && (
-              <PageTransition keyProp="home">
-                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-4xl h-96" /></div>}>
-                  <Hero>
-                    <Suspense fallback={<Skeleton className="w-full h-64" />}>
-                      <UploadPanel {...uploadProps} />
-                    </Suspense>
-                  </Hero>
-                  <TrustStrip />
-                  <HowItWorks />
-                  <EvidencePhilosophy />
-                  <EvidenceTrail />
-                  <SafetySection />
-                </Suspense>
-              </PageTransition>
-            )}
+        {(stage === 'UPLOADING' || stage === 'PROCESSING') && (
+          <PageTransition keyProp="processing">
+            <Suspense fallback={<ProgressSkeleton />}>
+              <AnalysisProgress currentStage={stage} statusMessage={statusMessage} />
+            </Suspense>
+          </PageTransition>
+        )}
 
-            {(stage === 'UPLOADING' || stage === 'PROCESSING') && (
-              <PageTransition keyProp="processing">
-                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-3xl h-64" /></div>}>
-                  <AnalysisProgress currentStage={stage} statusMessage={statusMessage} />
-                </Suspense>
-              </PageTransition>
-            )}
+        {stage === 'RESULT' && (
+          <PageTransition keyProp="result">
+            <Suspense fallback={<ResultSkeleton />}>
+              <ResultView result={result} onReset={resetFlow} />
+            </Suspense>
+          </PageTransition>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
 
-            {stage === 'RESULT' && (
-              <PageTransition keyProp="result">
-                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-6xl h-[80vh]" /></div>}>
-                  <ResultView result={result} onReset={resetFlow} />
-                </Suspense>
-              </PageTransition>
-            )}
-          </AnimatePresence>
+function LandingPage() {
+  const navigate = useNavigate();
+
+  // In the landing page, "Start Free" takes them to investigate (which prompts login if needed)
+  useEffect(() => {
+    const handleStartFree = (e) => {
+      e.preventDefault();
+      navigate('/investigate');
+    };
+    
+    // Attach listener to the CTA
+    const cta = document.getElementById('cta-start-free');
+    if (cta) {
+      cta.addEventListener('click', handleStartFree);
+      return () => cta.removeEventListener('click', handleStartFree);
+    }
+  }, [navigate]);
+
+  return (
+    <PageTransition keyProp="home">
+      <Suspense fallback={<HeroSkeleton />}>
+        <Hero />
+      </Suspense>
+      <Suspense fallback={<SectionSkeleton cards={4} cardHeight={60} />}>
+        <TrustStrip />
+      </Suspense>
+      <Suspense fallback={<SectionSkeleton cards={4} cardHeight={180} />}>
+        <HowItWorks />
+      </Suspense>
+      <Suspense fallback={<SectionSkeleton cards={2} cardHeight={280} />}>
+        <EvidencePhilosophy />
+      </Suspense>
+      <Suspense fallback={<SectionSkeleton cards={1} cardHeight={420} />}>
+        <EvidenceTrail />
+      </Suspense>
+      <Suspense fallback={<SectionSkeleton cards={3} cardHeight={120} />}>
+        <SafetySection />
+      </Suspense>
+    </PageTransition>
+  );
+}
+
+
+function App() {
+  return (
+    <SmoothScroll>
+      <div className="flex flex-col min-h-screen bg-[#09090b] text-white font-sans selection:bg-green-500 selection:text-black">
+        <Navbar />
+
+        <main className="flex-grow flex flex-col relative z-10">
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            
+            {/* Auth Routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            
+            {/* Protected Routes */}
+            <Route path="/investigate" element={<ProtectedRoute><InvestigationFlow /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+          </Routes>
         </main>
 
         <Footer />
