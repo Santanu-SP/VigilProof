@@ -14,12 +14,6 @@ if str(RISK_ENGINE_ROOT) not in sys.path:
 
 from risk_engine import assess_risk
 
-RISK_ENGINE_ROOT = Path(__file__).resolve().parents[1] / 'risk-engine'
-if str(RISK_ENGINE_ROOT) not in sys.path:
-    sys.path.insert(0, str(RISK_ENGINE_ROOT))
-
-from risk_engine import assess_risk
-
 class UnauthorizedError(Exception):
     pass
 
@@ -34,6 +28,11 @@ def get_authenticated_user(event):
         return sub
     except AttributeError:
         raise UnauthorizedError("Missing authentication context")
+
+
+def _require_case_owner(item, owner_sub):
+    if item.get('ownerSub') != owner_sub:
+        raise ForbiddenError("Case access denied")
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -130,7 +129,7 @@ def _invoke_ai_extractor(case_id: str):
 def create_case_handler(event, context):
     try:
         owner_sub = get_authenticated_user(event)
-        
+
         case_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
         expire_at = int((now + timedelta(days=7)).timestamp())
@@ -163,7 +162,10 @@ def create_case_handler(event, context):
             "uploadUrl": upload_url,
             "objectKey": object_key
         })
-        
+
+    except UnauthorizedError as e:
+        logger.warning("Unauthorized create request: %s", e)
+        return _build_response(401, {"error": "Unauthorized"})
     except ClientError as e:
         logger.error(f"AWS Error in create_case: {e}")
         return _build_response(500, {"error": "Internal Server Error"})
@@ -174,46 +176,7 @@ def create_case_handler(event, context):
 def analyze_case_handler(event, context):
     try:
         owner_sub = get_authenticated_user(event)
-        
-        path_parameters = event.get('pathParameters') or {}
-        case_id = path_parameters.get('caseId')
 
-        if not case_id or not _validate_uuid(case_id):
-            return _build_response(400, {"error": "Invalid caseId"})
-
-        table = dynamodb.Table(CASES_TABLE)
-        response = table.get_item(Key={'caseId': case_id})
-
-        if 'Item' not in response:
-            return _build_response(404, {"error": "Case not found"})
-            
-        # Update status to PROCESSING
-        table.update_item(
-            Key={'caseId': case_id},
-            UpdateExpression="SET #s = :s",
-            ExpressionAttributeNames={'#s': 'status'},
-            ExpressionAttributeValues={':s': 'PROCESSING'}
-        )
-        
-        # Invoke adapter
-        _invoke_ai_extractor(case_id)
-        
-        return _build_response(200, {
-            "caseId": case_id,
-            "status": "PROCESSING"
-        })
-        
-    except ClientError as e:
-        logger.error(f"AWS Error in analyze_case: {e}")
-        return _build_response(500, {"error": "Internal Server Error"})
-    except Exception as e:
-        logger.error(f"Unexpected error in analyze_case: {e}")
-        return _build_response(500, {"error": "Internal Server Error"})
-
-def get_case_handler(event, context):
-    try:
-        owner_sub = get_authenticated_user(event)
-        
         path_parameters = event.get('pathParameters') or {}
         case_id = path_parameters.get('caseId')
 
@@ -227,7 +190,92 @@ def get_case_handler(event, context):
             return _build_response(404, {"error": "Case not found"})
 
         item = response['Item']
-        
+        _require_case_owner(item, owner_sub)
+
+        if item.get('status') in ['PROCESSING', 'COMPLETED']:
+            return _build_response(409, {"error": "Case is already processing or completed"})
+
+        object_key = f"cases/{case_id}/input"
+        try:
+            s3_client.head_object(Bucket=EVIDENCE_BUCKET, Key=object_key)
+        except ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                return _build_response(400, {"error": "Evidence not uploaded yet"})
+            raise
+
+        table.update_item(
+            Key={'caseId': case_id},
+            UpdateExpression="SET #s = :s",
+            ExpressionAttributeNames={'#s': 'status'},
+            ExpressionAttributeValues={':s': 'PROCESSING'}
+        )
+
+        try:
+            evidence = _invoke_ai_extractor(case_id)
+            risk = _invoke_risk_engine(evidence)
+
+            update_expr = "SET #s = :s, #e = :e"
+            expr_names = {'#s': 'status', '#e': 'evidence'}
+            expr_vals = {':s': 'COMPLETED', ':e': evidence}
+            if risk is not None:
+                update_expr += ", #r = :r"
+                expr_names['#r'] = 'risk'
+                expr_vals[':r'] = risk
+
+            table.update_item(
+                Key={'caseId': case_id},
+                UpdateExpression=update_expr,
+                ExpressionAttributeNames=expr_names,
+                ExpressionAttributeValues=expr_vals,
+            )
+            return _build_response(200, {
+                "caseId": case_id,
+                "status": "COMPLETED",
+                "evidence": evidence,
+                "risk": risk,
+                "error": None,
+            })
+        except Exception as extractor_err:
+            logger.error("Analysis failed: %s", type(extractor_err).__name__)
+            table.update_item(
+                Key={'caseId': case_id},
+                UpdateExpression="SET #s = :s, #err = :err",
+                ExpressionAttributeNames={'#s': 'status', '#err': 'error'},
+                ExpressionAttributeValues={':s': 'FAILED', ':err': "Analysis failed due to internal error"},
+            )
+            return _build_response(500, {"error": "Analysis failed"})
+    except UnauthorizedError as e:
+        logger.warning("Unauthorized analyze request: %s", e)
+        return _build_response(401, {"error": "Unauthorized"})
+    except ForbiddenError as e:
+        logger.warning("Forbidden analyze request: %s", e)
+        return _build_response(403, {"error": "Forbidden"})
+    except ClientError as e:
+        logger.error(f"AWS Error in analyze_case: {e}")
+        return _build_response(500, {"error": "Internal Server Error"})
+    except Exception as e:
+        logger.error(f"Unexpected error in analyze_case: {e}")
+        return _build_response(500, {"error": "Internal Server Error"})
+
+def get_case_handler(event, context):
+    try:
+        owner_sub = get_authenticated_user(event)
+
+        path_parameters = event.get('pathParameters') or {}
+        case_id = path_parameters.get('caseId')
+
+        if not case_id or not _validate_uuid(case_id):
+            return _build_response(400, {"error": "Invalid caseId"})
+
+        table = dynamodb.Table(CASES_TABLE)
+        response = table.get_item(Key={'caseId': case_id})
+
+        if 'Item' not in response:
+            return _build_response(404, {"error": "Case not found"})
+
+        item = response['Item']
+        _require_case_owner(item, owner_sub)
+
         # Default shape as per contract
         body = {
             "caseId": item.get('caseId'),
@@ -255,7 +303,13 @@ def get_case_handler(event, context):
         }
 
         return _build_response(200, body)
-        
+
+    except UnauthorizedError as e:
+        logger.warning("Unauthorized get request: %s", e)
+        return _build_response(401, {"error": "Unauthorized"})
+    except ForbiddenError as e:
+        logger.warning("Forbidden get request: %s", e)
+        return _build_response(403, {"error": "Forbidden"})
     except ClientError as e:
         logger.error(f"AWS Error in get_case: {e}")
         return _build_response(500, {"error": "Internal Server Error"})
