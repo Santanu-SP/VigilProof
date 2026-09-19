@@ -7,13 +7,24 @@ Parameters:
     Type: String
     Description: Existing Standard SecureString parameter name for the Gemini API key
     Default: /vigilproof/prod/gemini-api-key
+  EnableGoogleAuth:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Enable only after the Google OAuth client is configured for the Cognito domain.
   GoogleClientId:
     Type: String
-    Description: Google OAuth client ID for Cognito federation
+    Default: ""
+    Description: Google OAuth client ID; required only when EnableGoogleAuth is true.
   GoogleClientSecret:
     Type: String
     NoEcho: true
-    Description: Google OAuth client secret for Cognito federation
+    Default: ""
+    Description: Google OAuth client secret; required only when EnableGoogleAuth is true.
+
+Conditions:
+  GoogleAuthEnabled: !Equals [!Ref EnableGoogleAuth, "true"]
+  GoogleAuthDisabled: !Not [!Condition GoogleAuthEnabled]
 
 Resources:
   EvidenceBucket:
@@ -143,8 +154,28 @@ Resources:
       EmailConfiguration:
         EmailSendingAccount: COGNITO_DEFAULT
 
-  UserPoolClient:
+  UserPoolClientCore:
     Type: AWS::Cognito::UserPoolClient
+    Condition: GoogleAuthDisabled
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: vigilproof-spa
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      PreventUserExistenceErrors: ENABLED
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email, profile]
+      CallbackURLs: [http://localhost:5173/]
+      LogoutURLs: [http://localhost:5173/]
+      SupportedIdentityProviders: [COGNITO]
+
+  UserPoolClientGoogle:
+    Type: AWS::Cognito::UserPoolClient
+    Condition: GoogleAuthEnabled
     DependsOn: GoogleIdentityProvider
     Properties:
       UserPoolId: !Ref UserPool
@@ -170,6 +201,7 @@ Resources:
 
   GoogleIdentityProvider:
     Type: AWS::Cognito::UserPoolIdentityProvider
+    Condition: GoogleAuthEnabled
     Properties:
       ProviderName: Google
       ProviderType: Google
@@ -194,7 +226,7 @@ Resources:
         Authorizers:
           CognitoJwt:
             JwtConfiguration:
-              Audience: [!Ref UserPoolClient]
+              Audience: !If [GoogleAuthEnabled, [!Ref UserPoolClientGoogle], [!Ref UserPoolClientCore]]
               Issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
             IdentitySource: "$request.header.Authorization"
 
@@ -276,7 +308,7 @@ Outputs:
   UserPoolId:
     Value: !Ref UserPool
   UserPoolClientId:
-    Value: !Ref UserPoolClient
+    Value: !If [GoogleAuthEnabled, !Ref UserPoolClientGoogle, !Ref UserPoolClientCore]
   CognitoDomain:
     Value: !Sub "${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com"
   CaseApiFunctionName:

@@ -164,6 +164,7 @@ def extract_evidence(image_s3_uri: str) -> Evidence:
     except ExtractionError:
         raise
     except Exception as error:
+        logger.warning("Gemini extraction request failed: %s", type(error).__name__)
         raise _provider_error(error) from None
     return parse_model_response(response.text)
 

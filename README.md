@@ -10,7 +10,7 @@ For the public demo, use synthetic or redacted material only. Do not upload pass
 ## Deployment prerequisites
 
 - Store a Gemini Developer API free-tier key as the SecureString `/vigilproof/prod/gemini-api-key`; do not commit the key.
-- Configure `GoogleClientId` and `GoogleClientSecret` only through the deployment secret workflow. Cognito's authorized redirect URI is `https://<CognitoDomain>/oauth2/idpresponse`.
+- The first deployment sets `EnableGoogleAuth=false`. Configure Google with the emitted Cognito domain, then deploy again with `EnableGoogleAuth=true`, `GoogleClientId`, and `GoogleClientSecret` through the deployment secret workflow. Cognito's authorized redirect URI is `https://<CognitoDomain>/oauth2/idpresponse`.
 - After deployment, configure the frontend with the `ApiBaseUrl`, `UserPoolId`, `UserPoolClientId`, and `CognitoDomain` stack outputs. Set the sign-in callback URL to the application's `/login` route.
 
 ## Day 1: AWS browser investigator
