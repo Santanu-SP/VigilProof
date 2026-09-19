@@ -1,57 +1,178 @@
 import React from 'react';
 import { UploadCloud, FileSearch, ShieldAlert, CheckCircle2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { SectionReveal, RevealItem } from '../ui/SectionReveal';
+
+const STEPS = [
+  {
+    icon: UploadCloud,
+    step: '01',
+    title: 'Upload suspicious evidence',
+    description: 'Upload a screenshot of the suspicious message, email, WhatsApp, or website.',
+  },
+  {
+    icon: FileSearch,
+    step: '02',
+    title: 'Extract observable signals',
+    description: 'VigilProof identifies URLs, claimed organizations, urgency, and payment requests.',
+  },
+  {
+    icon: ShieldAlert,
+    step: '03',
+    title: 'Inspect URLs safely',
+    description: 'Suspicious links are loaded in a controlled environment, looking for credential forms.',
+  },
+  {
+    icon: CheckCircle2,
+    step: '04',
+    title: 'Review the evidence',
+    description: 'See exactly why a message is risky before taking any action or sharing data.',
+  },
+];
 
 export default function HowItWorks() {
-  const steps = [
-    {
-      icon: <UploadCloud size={24} />,
-      title: '1. Upload suspicious evidence',
-      description: 'Upload a screenshot of the suspicious message, email, WhatsApp, or website.'
-    },
-    {
-      icon: <FileSearch size={24} />,
-      title: '2. Extract observable signals',
-      description: 'VigilProof identifies URLs, claimed organizations, urgency, and payment requests.'
-    },
-    {
-      icon: <ShieldAlert size={24} />,
-      title: '3. Inspect URLs safely',
-      description: 'Suspicious links are loaded in a controlled environment, looking for credential forms.'
-    },
-    {
-      icon: <CheckCircle2 size={24} />,
-      title: '4. Review the evidence',
-      description: 'See exactly why a message is risky before taking any action or sharing data.'
-    }
-  ];
-
   return (
-    <section id="how-it-works" className="py-24 bg-white border-b border-slate-200">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-16">
-          <span className="text-xs font-mono font-bold tracking-widest uppercase text-slate-500 mb-4 inline-block">The Process</span>
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900">How VigilProof works</h2>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {steps.map((step, idx) => (
-            <motion.div 
-              key={idx}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-50px" }}
-              transition={{ duration: 0.5, delay: idx * 0.1 }}
-              className="flex flex-col items-start p-6 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors group"
-            >
-              <div className="w-12 h-12 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-700 mb-6 group-hover:bg-slate-900 group-hover:text-white transition-colors">
-                {step.icon}
-              </div>
-              <h3 className="text-lg font-bold text-slate-900 mb-2">{step.title}</h3>
-              <p className="text-sm text-slate-600 font-mono leading-relaxed">{step.description}</p>
-            </motion.div>
-          ))}
-        </div>
+    <section
+      id="how-it-works"
+      style={{
+        padding: '96px 0',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        background: '#09090b',
+      }}
+    >
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px' }}>
+        <SectionReveal>
+          {/* Section header */}
+          <RevealItem>
+            <div style={{ textAlign: 'center', marginBottom: 56 }}>
+              <span
+                style={{
+                  display: 'inline-block',
+                  fontSize: '0.7rem',
+                  fontFamily: 'monospace',
+                  fontWeight: 700,
+                  letterSpacing: '0.18em',
+                  textTransform: 'uppercase',
+                  color: '#22c55e',
+                  marginBottom: 12,
+                  padding: '4px 12px',
+                  border: '1px solid rgba(34,197,94,0.25)',
+                  borderRadius: 9999,
+                  background: 'rgba(34,197,94,0.06)',
+                }}
+              >
+                The Process
+              </span>
+              <h2
+                style={{
+                  fontSize: 'clamp(1.8rem, 4vw, 2.6rem)',
+                  fontWeight: 800,
+                  color: '#ffffff',
+                  letterSpacing: '-0.03em',
+                  marginTop: 12,
+                  lineHeight: 1.15,
+                }}
+              >
+                How VigilProof works
+              </h2>
+            </div>
+          </RevealItem>
+
+          {/* Step cards grid */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+              gap: 20,
+            }}
+          >
+            {STEPS.map(({ icon: Icon, step, title, description }) => (
+              <RevealItem key={step}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    padding: '28px 24px',
+                    borderRadius: 16,
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.07)',
+                    height: '100%',
+                    transition: 'border-color 0.25s, box-shadow 0.25s',
+                    cursor: 'default',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = 'rgba(34,197,94,0.25)';
+                    e.currentTarget.style.boxShadow = '0 0 28px rgba(34,197,94,0.06)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  {/* Step number + icon row */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: 24,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 12,
+                        background: 'rgba(34,197,94,0.08)',
+                        border: '1px solid rgba(34,197,94,0.2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Icon
+                        size={20}
+                        style={{ color: '#22c55e', filter: 'drop-shadow(0 0 6px rgba(34,197,94,0.6))' }}
+                      />
+                    </div>
+                    <span
+                      style={{
+                        fontFamily: 'monospace',
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        color: 'rgba(34,197,94,0.4)',
+                        letterSpacing: '0.1em',
+                      }}
+                    >
+                      {step}
+                    </span>
+                  </div>
+
+                  <h3
+                    style={{
+                      fontSize: '1rem',
+                      fontWeight: 700,
+                      color: '#ffffff',
+                      marginBottom: 8,
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {title}
+                  </h3>
+                  <p
+                    style={{
+                      fontSize: '0.82rem',
+                      fontFamily: 'monospace',
+                      color: 'rgba(255,255,255,0.45)',
+                      lineHeight: 1.7,
+                    }}
+                  >
+                    {description}
+                  </p>
+                </div>
+              </RevealItem>
+            ))}
+          </div>
+        </SectionReveal>
       </div>
     </section>
   );

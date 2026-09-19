@@ -1,28 +1,83 @@
 import React from 'react';
 import { Search, ShieldCheck, Lock, Fingerprint } from 'lucide-react';
+import { SectionReveal, RevealItem } from '../ui/SectionReveal';
+
+const PILLARS = [
+  {
+    icon: Search,
+    label: 'Evidence-first analysis',
+  },
+  {
+    icon: ShieldCheck,
+    label: 'Controlled website inspection',
+  },
+  {
+    icon: Lock,
+    label: 'No password or OTP entry',
+  },
+  {
+    icon: Fingerprint,
+    label: 'Explainable risk signals',
+  },
+];
 
 export default function TrustStrip() {
   return (
-    <section className="border-b border-slate-200 bg-white py-8">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="flex items-center gap-3">
-            <Search className="text-slate-400" size={20} />
-            <span className="text-sm font-mono text-slate-700">Evidence-first analysis</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="text-slate-400" size={20} />
-            <span className="text-sm font-mono text-slate-700">Controlled website inspection</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <Lock className="text-slate-400" size={20} />
-            <span className="text-sm font-mono text-slate-700">No password or OTP entry</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <Fingerprint className="text-slate-400" size={20} />
-            <span className="text-sm font-mono text-slate-700">Explainable risk signals</span>
-          </div>
-        </div>
+    <section
+      style={{
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        background: 'rgba(255,255,255,0.02)',
+        padding: '28px 0',
+      }}
+    >
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px' }}>
+        <SectionReveal
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 16,
+          }}
+        >
+          {PILLARS.map(({ icon: Icon, label }) => (
+            <RevealItem key={label}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '10px 16px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(34,197,94,0.1)',
+                  background: 'rgba(34,197,94,0.04)',
+                  transition: 'border-color 0.2s, background 0.2s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = 'rgba(34,197,94,0.3)';
+                  e.currentTarget.style.background = 'rgba(34,197,94,0.08)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = 'rgba(34,197,94,0.1)';
+                  e.currentTarget.style.background = 'rgba(34,197,94,0.04)';
+                }}
+              >
+                <Icon
+                  size={16}
+                  style={{ color: '#22c55e', flexShrink: 0, filter: 'drop-shadow(0 0 4px rgba(34,197,94,0.5))' }}
+                />
+                <span
+                  style={{
+                    fontSize: '0.8rem',
+                    fontFamily: 'monospace',
+                    color: 'rgba(255,255,255,0.65)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {label}
+                </span>
+              </div>
+            </RevealItem>
+          ))}
+        </SectionReveal>
       </div>
     </section>
   );

@@ -6,7 +6,7 @@ import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import { SmoothScroll } from './components/layout/SmoothScroll';
 import { PageTransition } from './components/layout/PageTransition';
-import { Skeleton } from './components/ui/Skeleton';
+import { Skeleton, HeroSkeleton, SectionSkeleton, ResultSkeleton, ProgressSkeleton } from './components/ui/Skeleton';
 
 import './App.css';
 
@@ -181,31 +181,48 @@ function App() {
 
   return (
     <SmoothScroll>
-      <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-slate-900 selection:text-slate-50">
+      <div className="flex flex-col min-h-screen bg-[#09090b] text-white font-sans selection:bg-green-500 selection:text-black">
         <Navbar />
 
-        <main className="flex-grow flex flex-col relative z-10 pt-20">
+        <main className="flex-grow flex flex-col relative z-10">
           {error && (
-            <div className="max-w-7xl mx-auto w-full px-6 mt-8">
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+            <div className="max-w-7xl mx-auto w-full px-6 mt-20">
+              <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', padding: '12px 16px', borderRadius: '8px' }}>
                 <span className="font-mono text-sm">{error}</span>
               </div>
             </div>
           )}
 
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             {stage === 'HOME' && (
               <PageTransition keyProp="home">
-                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-4xl h-96" /></div>}>
+                {/* Hero — its own Suspense so the page shell loads first */}
+                <Suspense fallback={<HeroSkeleton />}>
                   <Hero>
-                    <Suspense fallback={<Skeleton className="w-full h-64" />}>
+                    <Suspense fallback={<HeroSkeleton />}>
                       <UploadPanel {...uploadProps} />
                     </Suspense>
                   </Hero>
+                </Suspense>
+
+                {/* Each below-fold section is code-split independently */}
+                <Suspense fallback={<SectionSkeleton cards={4} cardHeight={60} />}>
                   <TrustStrip />
+                </Suspense>
+
+                <Suspense fallback={<SectionSkeleton cards={4} cardHeight={180} />}>
                   <HowItWorks />
+                </Suspense>
+
+                <Suspense fallback={<SectionSkeleton cards={2} cardHeight={280} />}>
                   <EvidencePhilosophy />
+                </Suspense>
+
+                <Suspense fallback={<SectionSkeleton cards={1} cardHeight={420} />}>
                   <EvidenceTrail />
+                </Suspense>
+
+                <Suspense fallback={<SectionSkeleton cards={3} cardHeight={120} />}>
                   <SafetySection />
                 </Suspense>
               </PageTransition>
@@ -213,7 +230,7 @@ function App() {
 
             {(stage === 'UPLOADING' || stage === 'PROCESSING') && (
               <PageTransition keyProp="processing">
-                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-3xl h-64" /></div>}>
+                <Suspense fallback={<ProgressSkeleton />}>
                   <AnalysisProgress currentStage={stage} statusMessage={statusMessage} />
                 </Suspense>
               </PageTransition>
@@ -221,7 +238,7 @@ function App() {
 
             {stage === 'RESULT' && (
               <PageTransition keyProp="result">
-                <Suspense fallback={<div className="h-[60vh] w-full flex items-center justify-center p-6"><Skeleton className="w-full max-w-6xl h-[80vh]" /></div>}>
+                <Suspense fallback={<ResultSkeleton />}>
                   <ResultView result={result} onReset={resetFlow} />
                 </Suspense>
               </PageTransition>

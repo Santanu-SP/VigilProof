@@ -6,7 +6,7 @@ export function PageTransition({ children, keyProp }) {
       key={keyProp}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
+      exit={{ opacity: 0, y: -20, position: 'absolute', top: 0, left: 0, right: 0, zIndex: -1 }}
       transition={{
         type: "spring",
         stiffness: 260,

@@ -1,107 +1,297 @@
-import React from 'react';
-import { ShieldCheck, Search, Database, Lock, Loader2, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShieldCheck, Search, Database, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+/* ── Blinking cursor ─────────────────────────────────────────────────────────── */
+function BlinkCursor() {
+  return (
+    <motion.span
+      animate={{ opacity: [1, 0, 1] }}
+      transition={{ duration: 0.8, repeat: Infinity, ease: 'steps(1)' }}
+      style={{
+        display: 'inline-block',
+        width: 8,
+        height: '1em',
+        background: '#22c55e',
+        boxShadow: '0 0 8px rgba(34,197,94,0.8)',
+        borderRadius: 1,
+        verticalAlign: 'text-bottom',
+        marginLeft: 4,
+      }}
+    />
+  );
+}
+
+/* ── Monospace spinner ───────────────────────────────────────────────────────── */
+function TerminalSpinner() {
+  const [frame, setFrame] = useState(0);
+  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  useEffect(() => {
+    const id = setInterval(() => setFrame(f => (f + 1) % frames.length), 80);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span style={{ color: '#22c55e', filter: 'drop-shadow(0 0 4px rgba(34,197,94,0.8))', fontFamily: 'monospace' }}>
+      {frames[frame]}
+    </span>
+  );
+}
+
+/* ── Stage status node ───────────────────────────────────────────────────────── */
+function StageNode({ state }) {
+  if (state === 'completed') {
+    return (
+      <span
+        style={{
+          fontFamily: 'monospace',
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          color: '#22c55e',
+          filter: 'drop-shadow(0 0 5px rgba(34,197,94,0.7))',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        [OK]
+      </span>
+    );
+  }
+  if (state === 'active') return <TerminalSpinner />;
+  return (
+    <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: 'rgba(255,255,255,0.2)' }}>
+      [--]
+    </span>
+  );
+}
+
+/* ── Main component ──────────────────────────────────────────────────────────── */
 export default function AnalysisProgress({ currentStage, statusMessage }) {
   const stages = [
-    { id: 'UPLOADING', label: 'Evidence received', icon: ShieldCheck },
-    { id: 'extracting_evidence', label: 'Extracting observable signals', icon: Database },
-    { id: 'checking_indicators', label: 'Checking links', icon: Search },
-    { id: 'preparing_result', label: 'Preparing result', icon: Lock }
+    { id: 'UPLOADING',           label: 'Evidence received',            icon: ShieldCheck },
+    { id: 'extracting_evidence', label: 'Extracting observable signals', icon: Database    },
+    { id: 'checking_indicators', label: 'Checking links',               icon: Search      },
+    { id: 'preparing_result',    label: 'Preparing result',             icon: Lock        },
   ];
 
   const getStageState = (stageId) => {
     if (currentStage === 'UPLOADING') {
       return stageId === 'UPLOADING' ? 'active' : 'pending';
     }
-    
     const currentIndex = stages.findIndex(s => s.id === statusMessage);
-    const itemIndex = stages.findIndex(s => s.id === stageId);
-    
+    const itemIndex    = stages.findIndex(s => s.id === stageId);
     if (currentIndex === -1) {
-       return itemIndex === 0 ? 'completed' : (itemIndex === 1 ? 'active' : 'pending');
+      return itemIndex === 0 ? 'completed' : itemIndex === 1 ? 'active' : 'pending';
     }
-
-    if (itemIndex < currentIndex) return 'completed';
+    if (itemIndex < currentIndex)  return 'completed';
     if (itemIndex === currentIndex) return 'active';
     return 'pending';
   };
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.2, delayChildren: 0.1 } },
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, x: -16 },
+    show:   { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 120, damping: 18 } },
+  };
+
   return (
-    <div className="max-w-3xl mx-auto w-full px-6 py-12">
-      <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden relative">
-        {/* Terminal Header */}
-        <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-4 h-4 text-cyan-600 animate-spin" />
-            <span className="text-sm font-mono font-medium text-slate-700 uppercase tracking-widest">Analyzing Evidence</span>
+    <div
+      style={{
+        maxWidth: 680,
+        margin: '0 auto',
+        width: '100%',
+        padding: '80px 24px 48px',
+      }}
+    >
+      <motion.div
+        layoutId="investigation-container"
+        style={{
+          background: 'rgba(0,0,0,0.55)',
+          border: '1px solid rgba(34,197,94,0.18)',
+          borderRadius: 16,
+          overflow: 'hidden',
+          boxShadow: '0 0 0 1px rgba(34,197,94,0.06), 0 24px 60px rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+        }}
+      >
+        {/* ── Terminal chrome bar ── */}
+        <div
+          style={{
+            background: 'rgba(34,197,94,0.05)',
+            borderBottom: '1px solid rgba(34,197,94,0.12)',
+            padding: '12px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Traffic lights */}
+            <div style={{ display: 'flex', gap: 6 }}>
+              {['rgba(239,68,68,0.6)', 'rgba(251,191,36,0.6)', 'rgba(34,197,94,0.6)'].map((c, i) => (
+                <div key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />
+              ))}
+            </div>
+            <TerminalSpinner />
+            <span
+              style={{
+                fontFamily: 'monospace',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+                color: '#22c55e',
+              }}
+            >
+              vigil-analyze
+            </span>
           </div>
-          <span className="text-xs font-mono text-slate-500">v_2.1</span>
+          <span
+            style={{
+              fontFamily: 'monospace',
+              fontSize: '0.7rem',
+              color: 'rgba(255,255,255,0.2)',
+            }}
+          >
+            v2.1
+          </span>
         </div>
-        
-        <div className="p-8 font-mono">
-          <div className="flex flex-col gap-6">
+
+        {/* ── Stage list ── */}
+        <div style={{ padding: '28px 24px 8px' }}>
+          <motion.div
+            style={{ display: 'flex', flexDirection: 'column', gap: 0 }}
+            variants={containerVariants}
+            initial="hidden"
+            animate="show"
+          >
             {stages.map((stage, index) => {
               const state = getStageState(stage.id);
-              const Icon = state === 'completed' ? CheckCircle2 : stage.icon;
-              
+              const isActive = state === 'active';
+              const isCompleted = state === 'completed';
+              const isPending = state === 'pending';
+
               return (
-                <div key={stage.id} className="flex gap-4 relative">
-                  {/* Connector Line */}
+                <motion.div
+                  key={stage.id}
+                  variants={itemVariants}
+                  style={{ display: 'flex', gap: 16, position: 'relative', paddingBottom: 20 }}
+                >
+                  {/* Connector line */}
                   {index < stages.length - 1 && (
-                    <div className="absolute left-[11px] top-7 bottom-[-20px] w-[2px] bg-slate-100"></div>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: 10,
+                        top: 22,
+                        bottom: 0,
+                        width: 1,
+                        background: isCompleted
+                          ? 'rgba(34,197,94,0.4)'
+                          : 'rgba(255,255,255,0.06)',
+                        transition: 'background 0.6s ease',
+                      }}
+                    />
                   )}
-                  
-                  {/* Icon Node */}
-                  <div className={`relative z-10 w-6 h-6 rounded flex items-center justify-center border transition-colors duration-300
-                    ${state === 'completed' ? 'bg-slate-900 border-slate-900 text-slate-50' : 
-                      state === 'active' ? 'bg-cyan-50 border-cyan-500 text-cyan-600' : 
-                      'bg-slate-50 border-slate-200 text-slate-300'}`}
+
+                  {/* Stage node */}
+                  <div
+                    style={{
+                      width: 22,
+                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      paddingTop: 1,
+                    }}
                   >
-                    {state === 'active' ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <Icon size={12} />
-                    )}
+                    <StageNode state={state} />
                   </div>
-                  
-                  {/* Content */}
-                  <div className="flex flex-col pt-0.5">
-                    <span className={`text-sm tracking-tight transition-colors duration-300
-                      ${state === 'completed' ? 'text-slate-900 font-medium' : 
-                        state === 'active' ? 'text-cyan-700 font-medium' : 
-                        'text-slate-400'}`}
-                    >
-                      {state === 'active' ? '> ' + stage.label + '...' : stage.label}
-                    </span>
+
+                  {/* Label + sub-line */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                      <motion.span
+                        animate={
+                          isActive
+                            ? { opacity: [1, 0.6, 1] }
+                            : { opacity: 1 }
+                        }
+                        transition={isActive ? { duration: 1.6, repeat: Infinity } : {}}
+                        style={{
+                          fontFamily: 'monospace',
+                          fontSize: '0.82rem',
+                          fontWeight: isActive || isCompleted ? 600 : 400,
+                          color: isCompleted
+                            ? '#22c55e'
+                            : isActive
+                            ? '#ffffff'
+                            : 'rgba(255,255,255,0.25)',
+                          letterSpacing: '0.02em',
+                          transition: 'color 0.4s ease',
+                        }}
+                      >
+                        {isActive ? `> ${stage.label}...` : stage.label}
+                      </motion.span>
+                      {/* Blinking cursor on active step */}
+                      {isActive && <BlinkCursor />}
+                    </div>
+
+                    {/* Animated sub-status line */}
                     <AnimatePresence>
-                      {state === 'active' && (
-                        <motion.span 
+                      {isActive && (
+                        <motion.div
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: 'auto' }}
                           exit={{ opacity: 0, height: 0 }}
-                          className="text-xs text-slate-500 mt-1"
+                          transition={{ duration: 0.25 }}
+                          style={{ overflow: 'hidden' }}
                         >
-                          Processing data nodes
-                        </motion.span>
+                          <span
+                            style={{
+                              fontFamily: 'monospace',
+                              fontSize: '0.7rem',
+                              color: 'rgba(34,197,94,0.5)',
+                            }}
+                          >
+                            Processing data nodes...
+                          </span>
+                        </motion.div>
                       )}
                     </AnimatePresence>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
-          </div>
+          </motion.div>
         </div>
-        
-        {/* Scanning beam effect at bottom */}
-        <div className="h-1 w-full bg-slate-100 relative overflow-hidden">
-          <motion.div 
-            className="absolute top-0 bottom-0 w-1/3 bg-cyan-400 opacity-50 blur-[2px]"
-            animate={{ left: ['-30%', '100%'] }}
-            transition={{ duration: 1.5, ease: "linear", repeat: Infinity }}
+
+        {/* ── Scanning beam footer ── */}
+        <div
+          style={{
+            height: 2,
+            width: '100%',
+            background: 'rgba(34,197,94,0.06)',
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          <motion.div
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              width: '35%',
+              background: 'linear-gradient(90deg, transparent, #22c55e, transparent)',
+              filter: 'blur(1px)',
+              boxShadow: '0 0 12px rgba(34,197,94,0.8)',
+            }}
+            animate={{ left: ['-35%', '100%'] }}
+            transition={{ duration: 1.8, ease: 'linear', repeat: Infinity }}
           />
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
