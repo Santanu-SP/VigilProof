@@ -14,6 +14,21 @@ if str(RISK_ENGINE_ROOT) not in sys.path:
 
 from risk_engine import assess_risk
 
+class UnauthorizedError(Exception):
+    pass
+
+class ForbiddenError(Exception):
+    pass
+
+def get_authenticated_user(event):
+    try:
+        sub = event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {}).get('sub')
+        if not sub:
+            raise UnauthorizedError("Missing sub claim")
+        return sub
+    except AttributeError:
+        raise UnauthorizedError("Missing authentication context")
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -108,6 +123,8 @@ def _invoke_ai_extractor(case_id: str):
 
 def create_case_handler(event, context):
     try:
+        owner_sub = get_authenticated_user(event)
+        
         case_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
         expire_at = int((now + timedelta(days=7)).timestamp())
@@ -116,6 +133,7 @@ def create_case_handler(event, context):
         table.put_item(
             Item={
                 'caseId': case_id,
+                'ownerSub': owner_sub,
                 'status': 'CREATED',
                 'createdAt': now.isoformat(),
                 'expireAt': expire_at
@@ -140,6 +158,9 @@ def create_case_handler(event, context):
             "objectKey": object_key
         })
 
+    except UnauthorizedError as e:
+        logger.warning(f"Unauthorized: {e}")
+        return _build_response(401, {"error": "Unauthorized"})
     except ClientError as e:
         logger.error(f"AWS Error in create_case: {e}")
         return _build_response(500, {"error": "Internal Server Error"})
@@ -149,6 +170,8 @@ def create_case_handler(event, context):
 
 def analyze_case_handler(event, context):
     try:
+        owner_sub = get_authenticated_user(event)
+        
         path_parameters = event.get('pathParameters') or {}
         case_id = path_parameters.get('caseId')
 
@@ -162,6 +185,12 @@ def analyze_case_handler(event, context):
             return _build_response(404, {"error": "Case not found"})
 
         item = response['Item']
+
+        # Enforce resource ownership
+        if 'ownerSub' not in item:
+            raise ForbiddenError("Legacy case access denied")
+        if item['ownerSub'] != owner_sub:
+            raise ForbiddenError("Access denied")
 
         if item.get('status') in ['PROCESSING', 'COMPLETED']:
             return _build_response(409, {"error": "Case is already processing or completed"})
@@ -225,6 +254,12 @@ def analyze_case_handler(event, context):
             )
             return _build_response(500, {"error": "Analysis failed"})
 
+    except UnauthorizedError as e:
+        logger.warning(f"Unauthorized: {e}")
+        return _build_response(401, {"error": "Unauthorized"})
+    except ForbiddenError as e:
+        logger.warning(f"Forbidden: {e}")
+        return _build_response(403, {"error": "Forbidden"})
     except ClientError as e:
         logger.error(f"AWS Error in analyze_case: {e}")
         return _build_response(500, {"error": "Internal Server Error"})
@@ -234,6 +269,8 @@ def analyze_case_handler(event, context):
 
 def get_case_handler(event, context):
     try:
+        owner_sub = get_authenticated_user(event)
+        
         path_parameters = event.get('pathParameters') or {}
         case_id = path_parameters.get('caseId')
 
@@ -247,6 +284,12 @@ def get_case_handler(event, context):
             return _build_response(404, {"error": "Case not found"})
 
         item = response['Item']
+
+        # Enforce resource ownership
+        if 'ownerSub' not in item:
+            raise ForbiddenError("Legacy case access denied")
+        if item['ownerSub'] != owner_sub:
+            raise ForbiddenError("Access denied")
 
         # Default shape as per contract
         body = {
@@ -276,6 +319,12 @@ def get_case_handler(event, context):
 
         return _build_response(200, body)
 
+    except UnauthorizedError as e:
+        logger.warning(f"Unauthorized: {e}")
+        return _build_response(401, {"error": "Unauthorized"})
+    except ForbiddenError as e:
+        logger.warning(f"Forbidden: {e}")
+        return _build_response(403, {"error": "Forbidden"})
     except ClientError as e:
         logger.error(f"AWS Error in get_case: {e}")
         return _build_response(500, {"error": "Internal Server Error"})
