@@ -174,6 +174,22 @@ def test_primary_and_fallback_rate_limit_fails_after_two_calls(mock_s3, mock_cli
 
 @patch("extractor.get_gemini_client")
 @patch("extractor.get_s3_client")
+def test_daily_quota_exhaustion_has_only_one_primary_and_one_fallback_call(mock_s3, mock_client):
+    mock_s3.return_value.get_object.return_value = s3_response()
+    quota_exhausted = errors.ClientError(
+        429, {"error": {"status": "RESOURCE_EXHAUSTED", "message": "quota_exceeded daily quota"}}, None
+    )
+    mock_client.return_value.models.generate_content.side_effect = [quota_exhausted, quota_exhausted]
+
+    with pytest.raises(ExtractionError) as error:
+        extract_evidence("s3://evidence/cases/1/input")
+
+    assert error.value.code == "AI_PROVIDER_QUOTA_EXHAUSTED"
+    assert mock_client.return_value.models.generate_content.call_count == 2
+
+
+@patch("extractor.get_gemini_client")
+@patch("extractor.get_s3_client")
 def test_invalid_credentials_do_not_trigger_fallback(mock_s3, mock_client):
     mock_s3.return_value.get_object.return_value = s3_response()
     mock_client.return_value.models.generate_content.side_effect = errors.ClientError(
