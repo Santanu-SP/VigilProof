@@ -111,7 +111,7 @@ function InvestigationFlow() {
 
   const startPolling = (caseId) => {
     let attempts = 0;
-    const maxAttempts = 60; // 2 minutes with 2s interval
+    const maxAttempts = 90; // 3 minutes with 2s interval; allows bounded provider retries.
 
     pollIntervalRef.current = setInterval(async () => {
       try {
@@ -173,8 +173,7 @@ function InvestigationFlow() {
       setStatusMessage('extracting_evidence');
       const analysis = await startAnalysis(caseId);
 
-      // The local Case API currently completes synchronously, while a deployed
-      // implementation may acknowledge processing and require polling.
+      // The API acknowledges queued work; polling retrieves the durable result.
       if (analysis.status === 'COMPLETED') {
         showCompletedCase(analysis);
       } else if (analysis.status === 'FAILED') {

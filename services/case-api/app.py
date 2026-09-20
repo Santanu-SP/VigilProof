@@ -49,7 +49,10 @@ AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 EVIDENCE_BUCKET = os.environ.get('EVIDENCE_BUCKET')
 CASES_TABLE = os.environ.get('CASES_TABLE')
 AI_EXTRACTOR_FUNCTION_NAME = os.environ.get('AI_EXTRACTOR_FUNCTION_NAME')
+ANALYSIS_QUEUE_URL = os.environ.get('ANALYSIS_QUEUE_URL')
 AI_ENABLED = os.environ.get('AI_ENABLED', 'true').lower() == 'true'
+ANALYSIS_MAX_ATTEMPTS = int(os.environ.get('ANALYSIS_MAX_ATTEMPTS', '3'))
+ANALYSIS_RETRY_DELAY_SECONDS = int(os.environ.get('ANALYSIS_RETRY_DELAY_SECONDS', '30'))
 
 if not EVIDENCE_BUCKET or not CASES_TABLE:
     logger.warning("Missing required environment variables (EVIDENCE_BUCKET, CASES_TABLE)")
@@ -66,6 +69,7 @@ s3_client = boto3.client(
     config=Config(s3={'addressing_style': 'virtual'}),
 )
 lambda_client = boto3.client('lambda', region_name=AWS_REGION)
+sqs_client = boto3.client('sqs', region_name=AWS_REGION)
 
 
 def _build_response(status_code, body):
@@ -163,6 +167,94 @@ def _invoke_ai_extractor(case_id: str):
 
     return payload
 
+
+def _queue_analysis(case_id: str, delay_seconds: int = 0):
+    if not ANALYSIS_QUEUE_URL:
+        raise RuntimeError("ANALYSIS_QUEUE_URL is not configured")
+    sqs_client.send_message(
+        QueueUrl=ANALYSIS_QUEUE_URL,
+        MessageBody=json.dumps({"caseId": case_id}),
+        DelaySeconds=delay_seconds,
+    )
+
+
+def _complete_analysis(table, case_id: str, evidence: dict):
+    risk = _invoke_risk_engine(evidence)
+    update_expr = "SET #s = :s, #e = :e REMOVE analysisStartedAt"
+    expr_names = {'#s': 'status', '#e': 'evidence'}
+    expr_vals = {':s': 'COMPLETED', ':e': evidence}
+    if risk is not None:
+        update_expr = "SET #s = :s, #e = :e, #r = :r REMOVE analysisStartedAt"
+        expr_names['#r'] = 'risk'
+        expr_vals[':r'] = risk
+    table.update_item(
+        Key={'caseId': case_id},
+        UpdateExpression=update_expr,
+        ExpressionAttributeNames=expr_names,
+        ExpressionAttributeValues=expr_vals,
+    )
+
+
+def analysis_worker_handler(event, context):
+    """Process queued analyses without holding the API request open for Gemini."""
+    table = dynamodb.Table(CASES_TABLE)
+    for record in event.get('Records', []):
+        try:
+            payload = json.loads(record['body'])
+            case_id = payload.get('caseId')
+            if not case_id or not _validate_uuid(case_id):
+                logger.warning("Ignoring invalid analysis job")
+                continue
+
+            response = table.get_item(Key={'caseId': case_id})
+            item = response.get('Item')
+            if not item or item.get('status') != 'PROCESSING':
+                continue
+
+            try:
+                table.update_item(
+                    Key={'caseId': case_id},
+                    UpdateExpression="SET analysisStartedAt = :started",
+                    ConditionExpression="attribute_not_exists(analysisStartedAt)",
+                    ExpressionAttributeValues={':started': datetime.now(timezone.utc).isoformat()},
+                )
+            except ClientError as error:
+                if error.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
+                    continue
+                raise
+
+            try:
+                evidence = _invoke_ai_extractor(case_id)
+                _complete_analysis(table, case_id, evidence)
+            except ProviderError as error:
+                attempts = int(item.get('analysisAttempts', 0)) + 1
+                if error.code in {'AI_PROVIDER_RATE_LIMITED', 'AI_PROVIDER_TIMEOUT', 'AI_PROVIDER_UNAVAILABLE'} and attempts < ANALYSIS_MAX_ATTEMPTS:
+                    table.update_item(
+                        Key={'caseId': case_id},
+                        UpdateExpression="SET analysisAttempts = :attempts REMOVE analysisStartedAt",
+                        ExpressionAttributeValues={':attempts': attempts},
+                    )
+                    _queue_analysis(case_id, ANALYSIS_RETRY_DELAY_SECONDS * (2 ** (attempts - 1)))
+                    logger.warning("Analysis provider failure; queued retry %s", attempts)
+                else:
+                    table.update_item(
+                        Key={'caseId': case_id},
+                        UpdateExpression="SET #s = :status, #err = :error REMOVE analysisStartedAt",
+                        ExpressionAttributeNames={'#s': 'status', '#err': 'error'},
+                        ExpressionAttributeValues={':status': 'FAILED', ':error': str(error)},
+                    )
+                    logger.warning("Analysis provider failure after %s attempts: %s", attempts, error.code)
+            except Exception as error:
+                table.update_item(
+                    Key={'caseId': case_id},
+                    UpdateExpression="SET #s = :status, #err = :error REMOVE analysisStartedAt",
+                    ExpressionAttributeNames={'#s': 'status', '#err': 'error'},
+                    ExpressionAttributeValues={':status': 'FAILED', ':error': 'Analysis failed due to internal error'},
+                )
+                logger.error("Analysis worker failed: %s", type(error).__name__)
+        except (KeyError, TypeError, json.JSONDecodeError):
+            logger.warning("Ignoring malformed analysis job")
+
 def create_case_handler(event, context):
     try:
         owner_sub = get_authenticated_user(event)
@@ -247,54 +339,23 @@ def analyze_case_handler(event, context):
 
         table.update_item(
             Key={'caseId': case_id},
-            UpdateExpression="SET #s = :s",
-            ExpressionAttributeNames={'#s': 'status'},
-            ExpressionAttributeValues={':s': 'PROCESSING'}
+            UpdateExpression="SET #s = :s, analysisAttempts = :attempts, #err = :error",
+            ExpressionAttributeNames={'#s': 'status', '#err': 'error'},
+            ExpressionAttributeValues={':s': 'PROCESSING', ':attempts': 0, ':error': ''}
         )
-
         try:
-            evidence = _invoke_ai_extractor(case_id)
-            risk = _invoke_risk_engine(evidence)
-
-            update_expr = "SET #s = :s, #e = :e"
-            expr_names = {'#s': 'status', '#e': 'evidence'}
-            expr_vals = {':s': 'COMPLETED', ':e': evidence}
-            if risk is not None:
-                update_expr += ", #r = :r"
-                expr_names['#r'] = 'risk'
-                expr_vals[':r'] = risk
-
+            _queue_analysis(case_id)
+        except Exception:
             table.update_item(
                 Key={'caseId': case_id},
-                UpdateExpression=update_expr,
-                ExpressionAttributeNames=expr_names,
-                ExpressionAttributeValues=expr_vals,
-            )
-            return _build_response(200, {
-                "caseId": case_id,
-                "status": "COMPLETED",
-                "evidence": evidence,
-                "risk": risk,
-                "error": None,
-            })
-        except ProviderError as extractor_err:
-            logger.warning("Analysis provider failure: %s", extractor_err.code)
-            table.update_item(
-                Key={'caseId': case_id},
-                UpdateExpression="SET #s = :s, #err = :err",
+                UpdateExpression="SET #s = :status, #err = :error",
                 ExpressionAttributeNames={'#s': 'status', '#err': 'error'},
-                ExpressionAttributeValues={':s': 'FAILED', ':err': str(extractor_err)},
+                ExpressionAttributeValues={':status': 'FAILED', ':error': 'Analysis service is temporarily unavailable'},
             )
-            return _build_response(503, {"code": extractor_err.code, "error": str(extractor_err)})
-        except Exception as extractor_err:
-            logger.error("Analysis failed: %s", type(extractor_err).__name__)
-            table.update_item(
-                Key={'caseId': case_id},
-                UpdateExpression="SET #s = :s, #err = :err",
-                ExpressionAttributeNames={'#s': 'status', '#err': 'error'},
-                ExpressionAttributeValues={':s': 'FAILED', ':err': "Analysis failed due to internal error"},
-            )
-            return _build_response(500, {"error": "Analysis failed"})
+            logger.error("Unable to queue analysis")
+            return _build_response(503, {"error": "Evidence analysis is temporarily unavailable."})
+
+        return _build_response(202, {"caseId": case_id, "status": "PROCESSING"})
     except UnauthorizedError as e:
         logger.warning("Unauthorized analyze request: %s", e)
         return _build_response(401, {"error": "Unauthorized"})

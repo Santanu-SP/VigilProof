@@ -246,6 +246,7 @@ Resources:
           EVIDENCE_BUCKET: !Ref EvidenceBucket
           CASES_TABLE: !Ref CasesTable
           AI_EXTRACTOR_FUNCTION_NAME: !Ref ExtractorFunction
+          ANALYSIS_QUEUE_URL: !Ref AnalysisQueue
           AI_ENABLED: "true"
       Policies:
         - S3WritePolicy:
@@ -256,6 +257,8 @@ Resources:
             TableName: !Ref CasesTable
         - LambdaInvokePolicy:
             FunctionName: !Ref ExtractorFunction
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt AnalysisQueue.QueueName
       Events:
         CreateCase:
           Type: HttpApi
@@ -269,6 +272,49 @@ Resources:
         Health:
           Type: HttpApi
           Properties: {ApiId: !Ref VigilProofHttpApi, Path: /health, Method: GET, Auth: {Authorizer: NONE}}
+
+  AnalysisQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      SqsManagedSseEnabled: true
+      VisibilityTimeout: 90
+      MessageRetentionPeriod: 900
+
+  AnalysisWorkerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../services/case-api/
+      Handler: app.analysis_worker_handler
+      Runtime: python3.12
+      Architectures: [arm64]
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          EVIDENCE_BUCKET: !Ref EvidenceBucket
+          CASES_TABLE: !Ref CasesTable
+          AI_EXTRACTOR_FUNCTION_NAME: !Ref ExtractorFunction
+          ANALYSIS_QUEUE_URL: !Ref AnalysisQueue
+          AI_ENABLED: "true"
+          ANALYSIS_MAX_ATTEMPTS: "3"
+          ANALYSIS_RETRY_DELAY_SECONDS: "30"
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref EvidenceBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CasesTable
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ExtractorFunction
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt AnalysisQueue.QueueName
+      Events:
+        AnalysisQueueEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt AnalysisQueue.Arn
+            BatchSize: 1
 
   ExtractorFunction:
     Type: AWS::Serverless::Function
