@@ -147,3 +147,38 @@ def test_unknown_organization_does_not_create_mismatch() -> None:
         }
     )
     assert "ORG_DOMAIN_MISMATCH" not in _codes(result)
+
+
+def test_http_finding_reaches_the_engine_as_a_conservative_url_signal() -> None:
+    result = assess_risk(
+        {
+            "evidence": {"urls": ["http://example.com"]},
+            "urlAnalysis": [
+                {"url": "http://example.com", "findings": [{"code": "UNENCRYPTED_HTTP"}]}
+            ],
+        }
+    )
+
+    assert result["evidenceScore"] == 5
+    assert _codes(result) == ["UNENCRYPTED_HTTP"]
+    assert result["level"] == "LOW"
+
+
+def test_multiple_static_findings_reach_the_engine_once() -> None:
+    result = assess_risk(
+        {
+            "evidence": {"urls": ["http://example.com:8080"]},
+            "urlAnalysis": [
+                {
+                    "url": "http://example.com:8080",
+                    "findings": [
+                        {"code": "UNENCRYPTED_HTTP"},
+                        {"code": "UNUSUAL_PORT"},
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert result["evidenceScore"] == 20
+    assert _codes(result) == ["SUSPICIOUS_URL", "UNENCRYPTED_HTTP"]

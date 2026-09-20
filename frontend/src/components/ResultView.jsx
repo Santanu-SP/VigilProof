@@ -314,7 +314,7 @@ export default function ResultView({ result, onReset }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: 'spring', stiffness: 200, damping: 20, delay: 0.35 }}
         >
-          <ActionGuidance riskLevel={risk.level} />
+          <ActionGuidance riskLevel={risk.level} hasSignals={Array.isArray(risk.signals) && risk.signals.length > 0} />
         </motion.div>
       )}
 

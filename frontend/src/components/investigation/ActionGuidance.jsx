@@ -45,7 +45,7 @@ function ActionItem({ icon: Icon, iconColor, children }) {
   );
 }
 
-export default function ActionGuidance({ riskLevel }) {
+export default function ActionGuidance({ riskLevel, hasSignals = false }) {
   if (riskLevel === 'LOW') {
     return (
       <motion.div
@@ -81,7 +81,9 @@ export default function ActionGuidance({ riskLevel }) {
           animate="show"
         >
           <ActionItem icon={Info} iconColor="#22c55e">
-            While no immediate risk signals were found, always remain cautious.
+            {hasSignals
+              ? 'A low score can still include observable risk signals. Review them before proceeding.'
+              : 'While no immediate risk signals were found, always remain cautious.'}
           </ActionItem>
           <ActionItem icon={Info} iconColor="#22c55e">
             Verify the sender independently if you are still unsure.

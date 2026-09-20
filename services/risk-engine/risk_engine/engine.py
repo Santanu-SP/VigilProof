@@ -45,6 +45,7 @@ def _add_url_signals(signals: list[dict[str, Any]], analyses: Any) -> None:
 
     mismatch_url = ""
     suspicious_url = ""
+    unencrypted_url = ""
     for analysis in analyses:
         if not isinstance(analysis, Mapping):
             continue
@@ -58,7 +59,9 @@ def _add_url_signals(signals: list[dict[str, Any]], analyses: Any) -> None:
         }
         if "ORG_DOMAIN_MISMATCH" in codes and not mismatch_url:
             mismatch_url = url
-        if codes - {"ORG_DOMAIN_MISMATCH"} and not suspicious_url:
+        if "UNENCRYPTED_HTTP" in codes and not unencrypted_url:
+            unencrypted_url = url
+        if codes - {"ORG_DOMAIN_MISMATCH", "UNENCRYPTED_HTTP"} and not suspicious_url:
             suspicious_url = url
 
     if mismatch_url:
@@ -76,6 +79,15 @@ def _add_url_signals(signals: list[dict[str, Any]], analyses: Any) -> None:
                 "SUSPICIOUS_URL",
                 "Suspicious URL characteristics",
                 f"Static URL analysis found suspicious characteristics: {suspicious_url}",
+                "URL",
+            )
+        )
+    if unencrypted_url:
+        signals.append(
+            _signal(
+                "UNENCRYPTED_HTTP",
+                "Unencrypted HTTP connection",
+                f"The URL uses HTTP instead of HTTPS: {unencrypted_url}",
                 "URL",
             )
         )

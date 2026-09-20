@@ -188,16 +188,20 @@ def _queue_analysis(case_id: str):
 
 def _complete_analysis(table, case_id: str, evidence: dict, model_id: str | None, url_analysis=None):
     risk = _invoke_risk_engine(evidence, url_analysis)
-    update_expr = "SET #s = :s, #e = :e, analysisModel = :model REMOVE analysisStartedAt"
+    assignments = ["#s = :s", "#e = :e", "analysisModel = :model"]
     expr_names = {'#s': 'status', '#e': 'evidence'}
     expr_vals = {':s': 'COMPLETED', ':e': evidence, ':model': model_id or 'unknown'}
     if risk is not None:
-        update_expr = "SET #s = :s, #e = :e, #r = :r, analysisModel = :model REMOVE analysisStartedAt"
+        assignments.append("#r = :r")
         expr_names['#r'] = 'risk'
         expr_vals[':r'] = risk
+    if url_analysis is not None:
+        assignments.append("#u = :u")
+        expr_names['#u'] = 'urlAnalysis'
+        expr_vals[':u'] = url_analysis
     table.update_item(
         Key={'caseId': case_id},
-        UpdateExpression=update_expr,
+        UpdateExpression=f"SET {', '.join(assignments)} REMOVE analysisStartedAt",
         ExpressionAttributeNames=expr_names,
         ExpressionAttributeValues=expr_vals,
     )
@@ -444,6 +448,7 @@ def get_case_handler(event, context):
             "status": item.get('status', 'CREATED'),
             "inputType": item.get('inputType', 'IMAGE'),
             "sourceUrl": item.get('sourceUrl'),
+            "urlAnalysis": item.get('urlAnalysis', []),
             "evidence": item.get('evidence', {
                 "messageText": "",
                 "claimedOrganization": "",

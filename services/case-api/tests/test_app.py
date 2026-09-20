@@ -196,8 +196,28 @@ def test_url_case_uses_static_analysis_without_s3_or_gemini(mock_validate_url, d
     assert completed['sourceUrl'] == source_url
     assert completed['evidence']['urls'] == [source_url]
     assert any(signal['code'] == 'SUSPICIOUS_URL' for signal in completed['risk']['signals'])
+    assert completed['urlAnalysis'][0]['url'] == source_url
+    assert completed['urlAnalysis'][0]['findings'][0]['code'] == 'SUSPICIOUS_HOST_PATTERN'
     send_message.assert_called_once()
     invoke.assert_not_called()
+
+
+@patch('app.validate_public_url', new_callable=AsyncMock)
+def test_http_url_persists_static_signal_when_ai_is_disabled(mock_validate_url, dynamodb, monkeypatch):
+    monkeypatch.setattr('app.AI_ENABLED', False)
+    source_url = 'http://example.com'
+    created = create_case_handler(auth_event(body=json.dumps({'inputType': 'URL', 'url': source_url})), {})
+    case_id = json.loads(created['body'])['caseId']
+
+    with patch('app.sqs_client.send_message'):
+        assert analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})['statusCode'] == 202
+        analysis_worker_handler({'Records': [{'body': json.dumps({'caseId': case_id})}]}, {})
+
+    completed = json.loads(get_case_handler(auth_event(pathParameters={'caseId': case_id}), {})['body'])
+    assert completed['status'] == 'COMPLETED'
+    assert completed['risk']['evidenceScore'] == 5
+    assert completed['risk']['signals'][0]['code'] == 'UNENCRYPTED_HTTP'
+    assert completed['urlAnalysis'][0]['findings'][0]['code'] == 'UNENCRYPTED_HTTP'
 
 
 @patch('app.validate_public_url', new_callable=AsyncMock)

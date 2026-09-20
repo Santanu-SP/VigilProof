@@ -33,8 +33,12 @@ def analyze_url(url: str, claimed_organization: str | None = None) -> dict[str, 
     hostname = (parsed.hostname or "").rstrip(".").lower()
     if scheme not in {"http", "https"}:
         findings.append(_finding("UNSUPPORTED_SCHEME", "The URL does not use HTTP or HTTPS."))
+    elif scheme == "http":
+        findings.append(_finding("UNENCRYPTED_HTTP", "The URL uses an unencrypted HTTP connection."))
     if not hostname:
         findings.append(_finding("MISSING_HOSTNAME", "The URL has no hostname."))
+    if parsed.username is not None or parsed.password is not None:
+        findings.append(_finding("USERINFO_IN_URL", "The URL contains userinfo before the hostname."))
 
     is_ip_literal = _is_ip_literal(hostname)
     if is_ip_literal:
