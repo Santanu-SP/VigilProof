@@ -13,7 +13,9 @@ logger.setLevel(logging.INFO)
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 SUPPORTED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
-GEMINI_REQUEST_TIMEOUT_MS = int(os.environ.get("GEMINI_REQUEST_TIMEOUT_MS", "10000"))
+GEMINI_REQUEST_TIMEOUT_MS = int(os.environ.get("GEMINI_REQUEST_TIMEOUT_MS", "18000"))
+GEMINI_PRIMARY_MODEL = os.environ.get("GEMINI_PRIMARY_MODEL", os.environ.get("GEMINI_MODEL_ID", "gemini-3.8-flash"))
+GEMINI_FALLBACK_MODEL = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
 _cached_api_key: Optional[str] = None
 _gemini_client: Any = None
 
@@ -102,7 +104,12 @@ def get_gemini_client():
             raise ExtractionError("AI_PROVIDER_UNAVAILABLE", "Evidence analysis is temporarily unavailable.") from error
         _gemini_client = genai.Client(
             api_key=get_gemini_api_key(),
-            http_options=types.HttpOptions(timeout=GEMINI_REQUEST_TIMEOUT_MS),
+            # Retry ownership is deliberately in extract_evidence: primary once,
+            # then fallback once. The SDK's default is five attempts.
+            http_options=types.HttpOptions(
+                timeout=GEMINI_REQUEST_TIMEOUT_MS,
+                retry_options=types.HttpRetryOptions(attempts=1),
+            ),
         )
     return _gemini_client
 
@@ -143,53 +150,82 @@ def parse_model_response(payload: str | dict[str, Any]) -> Evidence:
 
 
 def _provider_error(error: Exception) -> ExtractionError:
-    message = str(error).lower()
-    if any(marker in message for marker in ("429", "rate limit", "resource exhausted")):
+    status_code = getattr(error, "code", None)
+    status = str(getattr(error, "status", "")).lower()
+    message = f"{status} {getattr(error, 'message', '')} {error}".lower()
+    if status_code == 429 or any(marker in message for marker in ("429", "rate limit", "resource exhausted", "too_many_requests")):
+        if "quota_exceeded" in message or "daily quota" in message:
+            return ExtractionError("AI_PROVIDER_QUOTA_EXHAUSTED", "Investigation service is temporarily busy. Please retry shortly.")
         return ExtractionError("AI_PROVIDER_RATE_LIMITED", "Investigation service is temporarily busy. Please retry shortly.")
-    if any(marker in message for marker in ("401", "403", "api key", "unauthorized", "permission denied")):
+    if status_code in {401, 403} or any(marker in message for marker in ("401", "403", "api key", "unauthorized", "permission denied")):
         return ExtractionError("AI_PROVIDER_AUTH_ERROR", "Evidence analysis is temporarily unavailable.")
     if any(marker in message for marker in ("timeout", "deadline exceeded")):
         return ExtractionError("AI_PROVIDER_TIMEOUT", "Evidence analysis is temporarily unavailable.")
     return ExtractionError("AI_PROVIDER_UNAVAILABLE", "Evidence analysis is temporarily unavailable.")
 
 
-def _is_retryable_provider_error(error: Exception) -> bool:
-    return type(error).__name__ == "ServerError"
+def _can_fallback(error: ExtractionError) -> bool:
+    return error.code in {
+        "AI_PROVIDER_RATE_LIMITED",
+        "AI_PROVIDER_QUOTA_EXHAUSTED",
+        "AI_PROVIDER_TIMEOUT",
+        "AI_PROVIDER_UNAVAILABLE",
+    }
 
 
-def extract_evidence(image_s3_uri: str) -> Evidence:
-    image_bytes, mime_type = _download_image_bytes(image_s3_uri)
-    model_id = os.environ.get("GEMINI_MODEL_ID", "gemini-3.8-flash")
+def _extract_with_model(image_bytes: bytes, mime_type: str, model_id: str) -> Evidence:
     from google.genai import types
-    for attempt in range(2):
-        try:
-            response = get_gemini_client().models.generate_content(
-                model=model_id,
-                contents=[types.Part.from_bytes(data=image_bytes, mime_type=mime_type), EXTRACTION_INSTRUCTION],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_json_schema=Evidence.model_json_schema(),
-                    temperature=0,
-                ),
-            )
-            break
-        except ExtractionError:
+    started = time.monotonic()
+    try:
+        response = get_gemini_client().models.generate_content(
+            model=model_id,
+            contents=[types.Part.from_bytes(data=image_bytes, mime_type=mime_type), EXTRACTION_INSTRUCTION],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_json_schema=Evidence.model_json_schema(),
+                temperature=0,
+            ),
+        )
+        evidence = parse_model_response(response.text)
+        logger.info("provider=gemini model=%s result=success duration_ms=%d", model_id, (time.monotonic() - started) * 1000)
+        return evidence
+    except ExtractionError:
+        raise
+    except Exception as error:
+        provider_error = _provider_error(error)
+        logger.warning(
+            "provider=gemini model=%s result=%s duration_ms=%d",
+            model_id,
+            provider_error.code.lower(),
+            (time.monotonic() - started) * 1000,
+        )
+        raise provider_error from None
+
+
+def extract_evidence(image_s3_uri: str) -> tuple[Evidence, str]:
+    image_bytes, mime_type = _download_image_bytes(image_s3_uri)
+    try:
+        return _extract_with_model(image_bytes, mime_type, GEMINI_PRIMARY_MODEL), GEMINI_PRIMARY_MODEL
+    except ExtractionError as primary_error:
+        if not _can_fallback(primary_error):
             raise
-        except Exception as error:
-            if attempt == 0 and _is_retryable_provider_error(error):
-                logger.warning("Gemini extraction request failed transiently; retrying once")
-                time.sleep(0.25)
-                continue
-            logger.warning("Gemini extraction request failed: %s", type(error).__name__)
-            raise _provider_error(error) from None
-    return parse_model_response(response.text)
+        try:
+            return _extract_with_model(image_bytes, mime_type, GEMINI_FALLBACK_MODEL), GEMINI_FALLBACK_MODEL
+        except ExtractionError as fallback_error:
+            logger.warning(
+                "provider=gemini primary_model=%s fallback_model=%s result=%s",
+                GEMINI_PRIMARY_MODEL,
+                GEMINI_FALLBACK_MODEL,
+                fallback_error.code.lower(),
+            )
+            raise fallback_error from None
 
 
 def handler(event, context):
     case_id = event.get("caseId")
     try:
-        evidence = extract_evidence(event.get("imageS3Uri", ""))
-        return {"statusCode": 200, "body": json.dumps({"caseId": case_id, "evidence": evidence.model_dump()})}
+        evidence, model_id = extract_evidence(event.get("imageS3Uri", ""))
+        return {"statusCode": 200, "body": json.dumps({"caseId": case_id, "evidence": evidence.model_dump(), "model": model_id})}
     except ExtractionError as error:
         logger.warning("Extraction failed for case %s: %s", case_id, error.code)
         return {"statusCode": 422, "body": json.dumps({"caseId": case_id, "code": error.code, "error": str(error)})}

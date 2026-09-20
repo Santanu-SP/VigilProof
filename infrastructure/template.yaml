@@ -298,8 +298,6 @@ Resources:
           AI_EXTRACTOR_FUNCTION_NAME: !Ref ExtractorFunction
           ANALYSIS_QUEUE_URL: !Ref AnalysisQueue
           AI_ENABLED: "true"
-          ANALYSIS_MAX_ATTEMPTS: "3"
-          ANALYSIS_RETRY_DELAY_SECONDS: "30"
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref EvidenceBucket
@@ -325,13 +323,14 @@ Resources:
       Handler: extractor.handler
       Runtime: python3.12
       Architectures: [arm64]
-      Timeout: 25
+      Timeout: 45
       MemorySize: 512
       Environment:
         Variables:
           AI_PROVIDER: gemini
-          GEMINI_MODEL_ID: gemini-3.8-flash
-          GEMINI_REQUEST_TIMEOUT_MS: "10000"
+          GEMINI_PRIMARY_MODEL: gemini-3.8-flash
+          GEMINI_FALLBACK_MODEL: gemini-3.5-flash-lite
+          GEMINI_REQUEST_TIMEOUT_MS: "18000"
           GEMINI_API_KEY_PARAMETER: !Ref GeminiApiKeyParameter
       Policies:
         - S3ReadPolicy:

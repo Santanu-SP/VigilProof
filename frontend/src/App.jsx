@@ -31,6 +31,8 @@ const AnalysisProgress = lazy(() => import('./components/investigation/AnalysisP
 const ResultView = lazy(() => import('./components/ResultView'));
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const BUSY_MESSAGE = 'Investigation service is temporarily busy.';
+const BUSY_RETRY_MESSAGE = 'Your evidence has been saved. Please retry shortly.';
 
 function InvestigationFlow() {
   const [file, setFile] = useState(null);
@@ -40,8 +42,10 @@ function InvestigationFlow() {
   const [result, setResult] = useState(null);
   const [savedCaseId, setSavedCaseId] = useState(null);
   const [dragActive, setDragActive] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef(null);
   const pollIntervalRef = useRef(null);
+  const inspectionInFlightRef = useRef(false);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -70,6 +74,15 @@ function InvestigationFlow() {
     return true;
   };
 
+  const beginNewEvidence = () => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    inspectionInFlightRef.current = false;
+    setSavedCaseId(null);
+    setResult(null);
+    setError(null);
+    setStage('HOME');
+  };
+
   const handleDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -78,6 +91,7 @@ function InvestigationFlow() {
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0];
       if (validateFile(droppedFile)) {
+        beginNewEvidence();
         setFile(droppedFile);
       }
     }
@@ -88,14 +102,15 @@ function InvestigationFlow() {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
       if (validateFile(selectedFile)) {
+        beginNewEvidence();
         setFile(selectedFile);
       }
     }
   };
 
   const handleRemoveFile = () => {
+    beginNewEvidence();
     setFile(null);
-    setError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -111,14 +126,16 @@ function InvestigationFlow() {
 
   const startPolling = (caseId) => {
     let attempts = 0;
-    const maxAttempts = 90; // 3 minutes with 2s interval; allows bounded provider retries.
+    const maxAttempts = 30;
 
     pollIntervalRef.current = setInterval(async () => {
       try {
         attempts++;
         if (attempts > maxAttempts) {
           clearInterval(pollIntervalRef.current);
-          setError('Analysis is taking too long. Please try again later.');
+          inspectionInFlightRef.current = false;
+          setIsSubmitting(false);
+          setError(`${BUSY_MESSAGE} ${BUSY_RETRY_MESSAGE}`);
           setStage('HOME');
           return;
         }
@@ -127,19 +144,27 @@ function InvestigationFlow() {
 
         if (caseData.status === 'COMPLETED') {
           clearInterval(pollIntervalRef.current);
+          inspectionInFlightRef.current = false;
+          setIsSubmitting(false);
+          setError(null);
           showCompletedCase(caseData);
         } else if (caseData.status === 'FAILED') {
           clearInterval(pollIntervalRef.current);
+          inspectionInFlightRef.current = false;
+          setIsSubmitting(false);
           const backendError = typeof caseData.error === 'string'
             ? caseData.error
             : caseData.error?.message;
-          setError(backendError || 'Analysis failed. The message could not be processed.');
+          const isTemporaryProviderFailure = /temporarily|busy|unavailable/i.test(backendError || '');
+          setError(isTemporaryProviderFailure ? `${BUSY_MESSAGE} ${BUSY_RETRY_MESSAGE}` : (backendError || 'Analysis failed. The evidence could not be processed.'));
           setStage('HOME');
         } else {
-          setStatusMessage('extracting_evidence');
+          setStatusMessage('analyzing_evidence');
         }
       } catch (err) {
         clearInterval(pollIntervalRef.current);
+        inspectionInFlightRef.current = false;
+        setIsSubmitting(false);
         setError(err.message || 'Unable to retrieve the analysis result.');
         setStage('HOME');
       }
@@ -153,7 +178,9 @@ function InvestigationFlow() {
   }, []);
 
   const handleInspect = async () => {
-    if (!file) return;
+    if (!file || inspectionInFlightRef.current) return;
+    inspectionInFlightRef.current = true;
+    setIsSubmitting(true);
 
     try {
       setError(null);
@@ -170,7 +197,7 @@ function InvestigationFlow() {
 
       // 3. Start Analysis
       setStage('PROCESSING');
-      setStatusMessage('extracting_evidence');
+      setStatusMessage('analyzing_evidence');
       const analysis = await startAnalysis(caseId);
 
       // The API acknowledges queued work; polling retrieves the durable result.
@@ -188,11 +215,39 @@ function InvestigationFlow() {
     } catch (err) {
       setError(err.message || 'An unexpected error occurred.');
       setStage('HOME');
+      inspectionInFlightRef.current = false;
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRetryAnalysis = async () => {
+    if (!savedCaseId || inspectionInFlightRef.current) return;
+    inspectionInFlightRef.current = true;
+    setIsSubmitting(true);
+    setError(null);
+    setStage('PROCESSING');
+    setStatusMessage('analyzing_evidence');
+    try {
+      const analysis = await startAnalysis(savedCaseId);
+      if (analysis.status === 'COMPLETED') {
+        inspectionInFlightRef.current = false;
+        setIsSubmitting(false);
+        showCompletedCase(analysis);
+      } else {
+        startPolling(savedCaseId);
+      }
+    } catch (err) {
+      inspectionInFlightRef.current = false;
+      setIsSubmitting(false);
+      setStage('HOME');
+      setError(err.message || `${BUSY_MESSAGE} ${BUSY_RETRY_MESSAGE}`);
     }
   };
 
   const resetFlow = () => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    inspectionInFlightRef.current = false;
+    setIsSubmitting(false);
     setFile(null);
     setResult(null);
     setSavedCaseId(null);
@@ -204,7 +259,7 @@ function InvestigationFlow() {
   };
 
   const uploadProps = {
-    file, dragActive, handleDrag, handleDrop, handleChange, handleRemoveFile, handleInspect, fileInputRef
+    file, dragActive, handleDrag, handleDrop, handleChange, handleRemoveFile, handleInspect, fileInputRef, isSubmitting
   };
 
   return (
@@ -213,7 +268,12 @@ function InvestigationFlow() {
         <div className="max-w-3xl mx-auto w-full px-6 pt-20 relative z-20" role="alert">
           <div style={{ background: 'rgba(172,110,39,0.12)', border: '1px solid rgba(232,174,84,0.36)', color: '#f3d6a7', padding: '16px 20px', borderRadius: '10px' }}>
             <span className="text-sm">{error}</span>
-            {savedCaseId && <p className="text-xs mt-2 text-white/60">Case reference: <code>{savedCaseId}</code>. No result was produced.</p>}
+            {savedCaseId && <p className="text-xs mt-2 text-white/60">Case reference: <code>{savedCaseId}</code>.</p>}
+            {savedCaseId && stage === 'HOME' && (
+              <button type="button" onClick={handleRetryAnalysis} disabled={isSubmitting} className="mt-3 rounded-md border border-amber-200/40 px-3 py-1.5 text-xs font-semibold text-amber-100 disabled:opacity-50">
+                Retry analysis
+              </button>
+            )}
           </div>
         </div>
       )}

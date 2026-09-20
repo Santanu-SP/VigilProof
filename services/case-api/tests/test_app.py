@@ -337,7 +337,7 @@ def test_analyze_malformed_extractor_output(mock_invoke, mock_send, dynamodb, s3
 
 @patch('app.sqs_client.send_message')
 @patch('app.lambda_client.invoke')
-def test_worker_requeues_transient_provider_failure(mock_invoke, mock_send, dynamodb, s3):
+def test_worker_marks_rate_limited_case_failed_without_requeue(mock_invoke, mock_send, dynamodb, s3):
     create_response = create_case_handler(auth_event(), {})
     case_id = json.loads(create_response['body'])['caseId']
     s3.put_object(Bucket='test-evidence-bucket', Key=f"cases/{case_id}/input", Body=b'dummy')
@@ -347,26 +347,20 @@ def test_worker_requeues_transient_provider_failure(mock_invoke, mock_send, dyna
     analysis_worker_handler({'Records': [{'body': json.dumps({'caseId': case_id})}]}, {})
 
     item = dynamodb.Table('test-cases-table').get_item(Key={'caseId': case_id})['Item']
-    assert item['status'] == 'PROCESSING'
-    assert item['analysisAttempts'] == 1
-    assert mock_send.call_count == 2
-    assert mock_send.call_args.kwargs['DelaySeconds'] == 30
+    assert item['status'] == 'FAILED'
+    assert item['providerErrorCode'] == 'AI_PROVIDER_RATE_LIMITED'
+    assert mock_send.call_count == 1
 
 
 @patch('app.sqs_client.send_message')
 @patch('app.lambda_client.invoke')
-def test_worker_marks_case_failed_after_retry_budget(mock_invoke, mock_send, dynamodb, s3):
+def test_worker_marks_unavailable_case_failed_after_one_attempt(mock_invoke, mock_send, dynamodb, s3):
     create_response = create_case_handler(auth_event(), {})
     case_id = json.loads(create_response['body'])['caseId']
     s3.put_object(Bucket='test-evidence-bucket', Key=f"cases/{case_id}/input", Body=b'dummy')
     mock_invoke.return_value = lambda_error_response('AI_PROVIDER_UNAVAILABLE', 'Temporarily unavailable.')
 
     assert analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})['statusCode'] == 202
-    dynamodb.Table('test-cases-table').update_item(
-        Key={'caseId': case_id},
-        UpdateExpression='SET analysisAttempts = :attempts',
-        ExpressionAttributeValues={':attempts': 2},
-    )
     analysis_worker_handler({'Records': [{'body': json.dumps({'caseId': case_id})}]}, {})
 
     item = dynamodb.Table('test-cases-table').get_item(Key={'caseId': case_id})['Item']
@@ -386,4 +380,34 @@ def test_repeated_analyze(mock_send, dynamodb, s3):
 
     # Second call
     res2 = analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})
-    assert res2['statusCode'] == 409
+    assert res2['statusCode'] == 202
+    assert mock_send.call_count == 1
+
+
+@patch('app.sqs_client.send_message')
+@patch('app.lambda_client.invoke')
+def test_retry_failed_case_reuses_case_and_object(mock_invoke, mock_send, dynamodb, s3):
+    create_response = create_case_handler(auth_event(), {})
+    case_id = json.loads(create_response['body'])['caseId']
+    object_key = f"cases/{case_id}/input"
+    s3.put_object(Bucket='test-evidence-bucket', Key=object_key, Body=b'dummy')
+    mock_invoke.return_value = lambda_error_response('AI_PROVIDER_RATE_LIMITED', 'Try again shortly.')
+
+    assert analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})['statusCode'] == 202
+    analysis_worker_handler({'Records': [{'body': json.dumps({'caseId': case_id})}]}, {})
+    assert dynamodb.Table('test-cases-table').get_item(Key={'caseId': case_id})['Item']['status'] == 'FAILED'
+
+    evidence = {
+        'messageText': 'hello', 'claimedOrganization': None, 'urls': [], 'phoneNumbers': [], 'upiIds': [], 'amounts': [],
+        'asksForPayment': False, 'asksForOtp': False, 'asksForPassword': False, 'threatLanguage': [], 'urgencyLanguage': [],
+    }
+    mock_invoke.return_value = lambda_response(evidence)
+    retry = analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})
+    assert retry['statusCode'] == 202
+    analysis_worker_handler({'Records': [{'body': json.dumps({'caseId': case_id})}]}, {})
+
+    item = dynamodb.Table('test-cases-table').get_item(Key={'caseId': case_id})['Item']
+    assert item['caseId'] == case_id
+    assert item['status'] == 'COMPLETED'
+    assert s3.head_object(Bucket='test-evidence-bucket', Key=object_key)['ContentLength'] == len(b'dummy')
+    assert mock_send.call_count == 2

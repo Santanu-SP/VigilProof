@@ -51,8 +51,6 @@ CASES_TABLE = os.environ.get('CASES_TABLE')
 AI_EXTRACTOR_FUNCTION_NAME = os.environ.get('AI_EXTRACTOR_FUNCTION_NAME')
 ANALYSIS_QUEUE_URL = os.environ.get('ANALYSIS_QUEUE_URL')
 AI_ENABLED = os.environ.get('AI_ENABLED', 'true').lower() == 'true'
-ANALYSIS_MAX_ATTEMPTS = int(os.environ.get('ANALYSIS_MAX_ATTEMPTS', '3'))
-ANALYSIS_RETRY_DELAY_SECONDS = int(os.environ.get('ANALYSIS_RETRY_DELAY_SECONDS', '30'))
 
 if not EVIDENCE_BUCKET or not CASES_TABLE:
     logger.warning("Missing required environment variables (EVIDENCE_BUCKET, CASES_TABLE)")
@@ -165,26 +163,25 @@ def _invoke_ai_extractor(case_id: str):
         if key not in payload:
             raise ValueError(f"Missing required field in extractor response: {key}")
 
-    return payload
+    return payload, body.get("model")
 
 
-def _queue_analysis(case_id: str, delay_seconds: int = 0):
+def _queue_analysis(case_id: str):
     if not ANALYSIS_QUEUE_URL:
         raise RuntimeError("ANALYSIS_QUEUE_URL is not configured")
     sqs_client.send_message(
         QueueUrl=ANALYSIS_QUEUE_URL,
         MessageBody=json.dumps({"caseId": case_id}),
-        DelaySeconds=delay_seconds,
     )
 
 
-def _complete_analysis(table, case_id: str, evidence: dict):
+def _complete_analysis(table, case_id: str, evidence: dict, model_id: str | None):
     risk = _invoke_risk_engine(evidence)
-    update_expr = "SET #s = :s, #e = :e REMOVE analysisStartedAt"
+    update_expr = "SET #s = :s, #e = :e, analysisModel = :model REMOVE analysisStartedAt"
     expr_names = {'#s': 'status', '#e': 'evidence'}
-    expr_vals = {':s': 'COMPLETED', ':e': evidence}
+    expr_vals = {':s': 'COMPLETED', ':e': evidence, ':model': model_id or 'unknown'}
     if risk is not None:
-        update_expr = "SET #s = :s, #e = :e, #r = :r REMOVE analysisStartedAt"
+        update_expr = "SET #s = :s, #e = :e, #r = :r, analysisModel = :model REMOVE analysisStartedAt"
         expr_names['#r'] = 'risk'
         expr_vals[':r'] = risk
     table.update_item(
@@ -224,26 +221,17 @@ def analysis_worker_handler(event, context):
                 raise
 
             try:
-                evidence = _invoke_ai_extractor(case_id)
-                _complete_analysis(table, case_id, evidence)
+                evidence, model_id = _invoke_ai_extractor(case_id)
+                _complete_analysis(table, case_id, evidence, model_id)
+                logger.info("caseId=%s provider=gemini model=%s result=completed", case_id, model_id or 'unknown')
             except ProviderError as error:
-                attempts = int(item.get('analysisAttempts', 0)) + 1
-                if error.code in {'AI_PROVIDER_RATE_LIMITED', 'AI_PROVIDER_TIMEOUT', 'AI_PROVIDER_UNAVAILABLE'} and attempts < ANALYSIS_MAX_ATTEMPTS:
-                    table.update_item(
-                        Key={'caseId': case_id},
-                        UpdateExpression="SET analysisAttempts = :attempts REMOVE analysisStartedAt",
-                        ExpressionAttributeValues={':attempts': attempts},
-                    )
-                    _queue_analysis(case_id, ANALYSIS_RETRY_DELAY_SECONDS * (2 ** (attempts - 1)))
-                    logger.warning("Analysis provider failure; queued retry %s", attempts)
-                else:
-                    table.update_item(
-                        Key={'caseId': case_id},
-                        UpdateExpression="SET #s = :status, #err = :error REMOVE analysisStartedAt",
-                        ExpressionAttributeNames={'#s': 'status', '#err': 'error'},
-                        ExpressionAttributeValues={':status': 'FAILED', ':error': str(error)},
-                    )
-                    logger.warning("Analysis provider failure after %s attempts: %s", attempts, error.code)
+                table.update_item(
+                    Key={'caseId': case_id},
+                    UpdateExpression="SET #s = :status, #err = :error, providerErrorCode = :code REMOVE analysisStartedAt",
+                    ExpressionAttributeNames={'#s': 'status', '#err': 'error'},
+                    ExpressionAttributeValues={':status': 'FAILED', ':error': str(error), ':code': error.code},
+                )
+                logger.warning("caseId=%s provider=gemini result=%s", case_id, error.code.lower())
             except Exception as error:
                 table.update_item(
                     Key={'caseId': case_id},
@@ -320,8 +308,10 @@ def analyze_case_handler(event, context):
         item = response['Item']
         _require_case_owner(item, owner_sub)
 
-        if item.get('status') in ['PROCESSING', 'COMPLETED']:
-            return _build_response(409, {"error": "Case is already processing or completed"})
+        if item.get('status') == 'PROCESSING':
+            return _build_response(202, {"caseId": case_id, "status": "PROCESSING"})
+        if item.get('status') == 'COMPLETED':
+            return _build_response(409, {"error": "Case is already completed"})
 
         object_key = f"cases/{case_id}/input"
         try:
@@ -337,12 +327,23 @@ def analyze_case_handler(event, context):
                 "error": "Evidence analysis is temporarily unavailable.",
             })
 
-        table.update_item(
-            Key={'caseId': case_id},
-            UpdateExpression="SET #s = :s, analysisAttempts = :attempts, #err = :error",
-            ExpressionAttributeNames={'#s': 'status', '#err': 'error'},
-            ExpressionAttributeValues={':s': 'PROCESSING', ':attempts': 0, ':error': ''}
-        )
+        try:
+            table.update_item(
+                Key={'caseId': case_id},
+                UpdateExpression="SET #s = :processing, #err = :error REMOVE providerErrorCode, analysisStartedAt",
+                ConditionExpression="#s IN (:created, :failed)",
+                ExpressionAttributeNames={'#s': 'status', '#err': 'error'},
+                ExpressionAttributeValues={
+                    ':processing': 'PROCESSING', ':created': 'CREATED', ':failed': 'FAILED', ':error': '',
+                },
+            )
+        except ClientError as error:
+            if error.response.get('Error', {}).get('Code') != 'ConditionalCheckFailedException':
+                raise
+            current = table.get_item(Key={'caseId': case_id}).get('Item', {})
+            if current.get('status') == 'PROCESSING':
+                return _build_response(202, {"caseId": case_id, "status": "PROCESSING"})
+            return _build_response(409, {"error": "Case is already completed"})
         try:
             _queue_analysis(case_id)
         except Exception:

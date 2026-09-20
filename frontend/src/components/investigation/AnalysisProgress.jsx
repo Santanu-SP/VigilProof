@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Search, Database, Lock } from 'lucide-react';
+import { ShieldCheck, Database } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -70,10 +70,8 @@ function StageNode({ state }) {
 /* ── Main component ──────────────────────────────────────────────────────────── */
 export default function AnalysisProgress({ currentStage, statusMessage }) {
   const stages = [
-    { id: 'UPLOADING',           label: 'Evidence received',            icon: ShieldCheck },
-    { id: 'extracting_evidence', label: 'Extracting observable signals', icon: Database    },
-    { id: 'checking_indicators', label: 'Checking links',               icon: Search      },
-    { id: 'preparing_result',    label: 'Preparing result',             icon: Lock        },
+    { id: 'UPLOADING', label: 'Saving evidence', icon: ShieldCheck },
+    { id: 'analyzing_evidence', label: 'Analyzing evidence', icon: Database },
   ];
 
   const getStageState = (stageId) => {
@@ -258,7 +256,7 @@ export default function AnalysisProgress({ currentStage, statusMessage }) {
                               color: 'rgba(34,197,94,0.5)',
                             }}
                           >
-                            Processing data nodes...
+                            Waiting for the evidence analysis result…
                           </span>
                         </motion.div>
                       )}

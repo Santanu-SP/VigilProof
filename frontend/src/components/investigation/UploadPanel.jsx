@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { UploadCloud, FileImage, X, Search, Target, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const MagneticButton = ({ onClick, children }) => {
+const MagneticButton = ({ onClick, children, disabled }) => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const buttonRef = useRef(null);
 
@@ -26,6 +26,7 @@ const MagneticButton = ({ onClick, children }) => {
       animate={{ x: position.x, y: position.y }}
       transition={{ type: "spring", stiffness: 150, damping: 15, mass: 0.1 }}
       onClick={onClick}
+      disabled={disabled}
       style={{
         position: 'relative',
         width: '100%',
@@ -39,7 +40,8 @@ const MagneticButton = ({ onClick, children }) => {
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
         fontSize: '0.9rem',
         letterSpacing: '0.01em',
         boxShadow: '0 0 20px rgba(34,197,94,0.35)',
@@ -69,7 +71,8 @@ export default function UploadPanel({
   handleChange,
   handleRemoveFile,
   handleInspect,
-  fileInputRef
+  fileInputRef,
+  isSubmitting
 }) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -238,6 +241,7 @@ export default function UploadPanel({
               <button
                 className="text-slate-400 hover:text-slate-900 transition-colors p-2"
                 onClick={handleRemoveFile}
+                disabled={isSubmitting}
                 aria-label="Remove file"
                 onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; }}
                 onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.3)'; }}
@@ -246,9 +250,9 @@ export default function UploadPanel({
               </button>
             </div>
 
-            <MagneticButton onClick={handleInspect}>
+            <MagneticButton onClick={handleInspect} disabled={isSubmitting}>
               <Search size={18} />
-              Inspect evidence
+              {isSubmitting ? 'Starting investigation…' : 'Inspect evidence'}
               <ArrowRight size={17} style={{ position: 'absolute', right: 16, opacity: 0, transform: 'translateX(-8px)', transition: 'all 0.25s' }} className="group-hover:opacity-100 group-hover:translate-x-0" />
             </MagneticButton>
           </motion.div>
