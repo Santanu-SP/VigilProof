@@ -133,14 +133,13 @@ export async function getGoogleLoginUrl() {
 export function completeGoogleLogin(searchParams) {
   if (googleLoginCompletion) return googleLoginCompletion;
 
-  googleLoginCompletion = (async () => {
+  const completion = (async () => {
     const code = searchParams.get('code');
     const state = searchParams.get('state');
     const verifier = sessionStorage.getItem('vigilproof.oauth.verifier');
     const expectedState = sessionStorage.getItem('vigilproof.oauth.state');
     if (!code || !verifier || !state || state !== expectedState) throw new Error('Google sign-in could not be verified. Please try again.');
 
-    sessionStorage.setItem('vigilproof.oauth.completed', code);
     sessionStorage.removeItem('vigilproof.oauth.verifier');
     sessionStorage.removeItem('vigilproof.oauth.state');
 
@@ -164,7 +163,12 @@ export function completeGoogleLogin(searchParams) {
     pool.storage.setItem(`CognitoIdentityServiceProvider.${CLIENT_ID}.LastAuthUser`, username);
   })();
 
-  return googleLoginCompletion;
+  googleLoginCompletion = completion;
+  completion.catch(() => {
+    // A failed token exchange must not block a later, fresh Google sign-in.
+    if (googleLoginCompletion === completion) googleLoginCompletion = null;
+  });
+  return completion;
 }
 
 /**
