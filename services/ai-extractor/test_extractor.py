@@ -13,6 +13,7 @@ from extractor import (
     _provider_error,
     extract_evidence,
     handler,
+    get_gemini_client,
     parse_model_response,
 )
 
@@ -56,6 +57,16 @@ def test_evidence_contract_allows_missing_organization_and_empty_lists():
 
     assert evidence.claimedOrganization is None
     assert evidence.urls == []
+
+
+@patch("extractor.get_gemini_api_key", return_value="test-key")
+def test_gemini_client_has_a_bounded_request_timeout(mock_api_key, monkeypatch):
+    import extractor
+
+    monkeypatch.setattr(extractor, "_gemini_client", None)
+    client = get_gemini_client()
+
+    assert client._api_client._http_options.timeout == 10000
 
 
 def test_prompt_treats_screenshot_as_untrusted_and_does_not_request_a_verdict():
@@ -106,6 +117,24 @@ def test_extracts_structured_evidence_with_gemini_schema(mock_s3, mock_client, m
     assert call["contents"][0].inline_data.mime_type == "image/jpeg"
     assert call["config"].response_mime_type == "application/json"
     assert call["config"].response_json_schema["title"] == "Evidence"
+
+
+@patch("extractor.time.sleep")
+@patch("extractor.get_gemini_client")
+@patch("extractor.get_s3_client")
+def test_retries_one_transient_gemini_server_error(mock_s3, mock_client, mock_sleep):
+    server_error = type("ServerError", (Exception,), {})
+    mock_s3.return_value.get_object.return_value = s3_response()
+    mock_client.return_value.models.generate_content.side_effect = [
+        server_error("temporary"),
+        MagicMock(text=json.dumps(sample_evidence())),
+    ]
+
+    evidence = extract_evidence("s3://evidence/cases/1/input")
+
+    assert evidence.asksForPayment is True
+    assert mock_client.return_value.models.generate_content.call_count == 2
+    mock_sleep.assert_called_once_with(0.25)
 
 
 def test_parse_model_response_rejects_invalid_json():

@@ -54,7 +54,7 @@ Resources:
         CorsRules:
           - AllowedHeaders: ["Content-Type"]
             AllowedMethods: [PUT]
-            AllowedOrigins: ["http://localhost:5173"]
+            AllowedOrigins: ["http://localhost:5173", "http://127.0.0.1:5173"]
             MaxAge: 300
 
   CasesTable:
@@ -220,7 +220,7 @@ Resources:
       CorsConfiguration:
         AllowHeaders: [Authorization, Content-Type]
         AllowMethods: [GET, POST, OPTIONS]
-        AllowOrigins: [http://localhost:5173]
+        AllowOrigins: [http://localhost:5173, http://127.0.0.1:5173]
       Auth:
         DefaultAuthorizer: CognitoJwt
         Authorizers:
@@ -236,10 +236,10 @@ Resources:
       BuildMethod: makefile
     Properties:
       CodeUri: ../services/case-api/
-      Handler: app.create_case_handler
+      Handler: app.lambda_handler
       Runtime: python3.12
       Architectures: [arm64]
-      Timeout: 15
+      Timeout: 29
       MemorySize: 256
       Environment:
         Variables:
@@ -279,12 +279,13 @@ Resources:
       Handler: extractor.handler
       Runtime: python3.12
       Architectures: [arm64]
-      Timeout: 30
+      Timeout: 25
       MemorySize: 512
       Environment:
         Variables:
           AI_PROVIDER: gemini
           GEMINI_MODEL_ID: gemini-3.8-flash
+          GEMINI_REQUEST_TIMEOUT_MS: "10000"
           GEMINI_API_KEY_PARAMETER: !Ref GeminiApiKeyParameter
       Policies:
         - S3ReadPolicy:

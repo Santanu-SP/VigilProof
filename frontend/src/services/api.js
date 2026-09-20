@@ -17,7 +17,7 @@ async function getAuthToken() {
       if (err || !session?.isValid()) {
         resolve(null);
       } else {
-        resolve(session.getIdToken().getJwtToken());
+        resolve(session.getAccessToken().getJwtToken());
       }
     });
   });

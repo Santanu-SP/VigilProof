@@ -3,9 +3,11 @@ import os
 import sys
 import uuid
 import logging
+from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 RISK_ENGINE_ROOT = Path(__file__).resolve().parents[1] / 'risk-engine'
@@ -54,22 +56,53 @@ if not EVIDENCE_BUCKET or not CASES_TABLE:
 
 
 dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
-s3_client = boto3.client('s3', region_name=AWS_REGION)
+# A regional endpoint is required for browser uploads. The S3 global endpoint
+# redirects buckets outside us-east-1, and browsers reject CORS preflight
+# redirects before the presigned PUT can be made.
+s3_client = boto3.client(
+    's3',
+    region_name=AWS_REGION,
+    endpoint_url=f"https://s3.{AWS_REGION}.amazonaws.com",
+    config=Config(s3={'addressing_style': 'virtual'}),
+)
 lambda_client = boto3.client('lambda', region_name=AWS_REGION)
 
 
 def _build_response(status_code, body):
+    def json_default(value):
+        if isinstance(value, Decimal):
+            return int(value) if value == value.to_integral_value() else float(value)
+        raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
     return {
         "statusCode": status_code,
         "headers": {
             "Content-Type": "application/json"
         },
-        "body": json.dumps(body)
+        "body": json.dumps(body, default=json_default)
     }
 
 
 def health_handler(event, context):
     return _build_response(200, {"status": "ok"})
+
+
+def lambda_handler(event, context):
+    """Dispatch HTTP API routes to their dedicated case handlers."""
+    request_context = event.get('requestContext') or {}
+    http = request_context.get('http') or {}
+    method = http.get('method') or event.get('httpMethod')
+    path = event.get('rawPath') or http.get('path') or event.get('path') or ''
+
+    if method == 'POST' and path == '/cases':
+        return create_case_handler(event, context)
+    if method == 'GET' and path == '/health':
+        return health_handler(event, context)
+    if method == 'GET' and path.startswith('/cases/'):
+        return get_case_handler(event, context)
+    if method == 'POST' and path.startswith('/cases/') and path.endswith('/analyze'):
+        return analyze_case_handler(event, context)
+    return _build_response(404, {"error": "Not found"})
 
 def _validate_uuid(val):
     try:

@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 import os
 from typing import Any, Optional
 
@@ -12,6 +13,7 @@ logger.setLevel(logging.INFO)
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 SUPPORTED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+GEMINI_REQUEST_TIMEOUT_MS = int(os.environ.get("GEMINI_REQUEST_TIMEOUT_MS", "10000"))
 _cached_api_key: Optional[str] = None
 _gemini_client: Any = None
 
@@ -95,9 +97,13 @@ def get_gemini_client():
     if _gemini_client is None:
         try:
             from google import genai
+            from google.genai import types
         except ImportError as error:
             raise ExtractionError("AI_PROVIDER_UNAVAILABLE", "Evidence analysis is temporarily unavailable.") from error
-        _gemini_client = genai.Client(api_key=get_gemini_api_key())
+        _gemini_client = genai.Client(
+            api_key=get_gemini_api_key(),
+            http_options=types.HttpOptions(timeout=GEMINI_REQUEST_TIMEOUT_MS),
+        )
     return _gemini_client
 
 
@@ -147,25 +153,35 @@ def _provider_error(error: Exception) -> ExtractionError:
     return ExtractionError("AI_PROVIDER_UNAVAILABLE", "Evidence analysis is temporarily unavailable.")
 
 
+def _is_retryable_provider_error(error: Exception) -> bool:
+    return type(error).__name__ == "ServerError"
+
+
 def extract_evidence(image_s3_uri: str) -> Evidence:
     image_bytes, mime_type = _download_image_bytes(image_s3_uri)
     model_id = os.environ.get("GEMINI_MODEL_ID", "gemini-3.8-flash")
-    try:
-        from google.genai import types
-        response = get_gemini_client().models.generate_content(
-            model=model_id,
-            contents=[types.Part.from_bytes(data=image_bytes, mime_type=mime_type), EXTRACTION_INSTRUCTION],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_json_schema=Evidence.model_json_schema(),
-                temperature=0,
-            ),
-        )
-    except ExtractionError:
-        raise
-    except Exception as error:
-        logger.warning("Gemini extraction request failed: %s", type(error).__name__)
-        raise _provider_error(error) from None
+    from google.genai import types
+    for attempt in range(2):
+        try:
+            response = get_gemini_client().models.generate_content(
+                model=model_id,
+                contents=[types.Part.from_bytes(data=image_bytes, mime_type=mime_type), EXTRACTION_INSTRUCTION],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_json_schema=Evidence.model_json_schema(),
+                    temperature=0,
+                ),
+            )
+            break
+        except ExtractionError:
+            raise
+        except Exception as error:
+            if attempt == 0 and _is_retryable_provider_error(error):
+                logger.warning("Gemini extraction request failed transiently; retrying once")
+                time.sleep(0.25)
+                continue
+            logger.warning("Gemini extraction request failed: %s", type(error).__name__)
+            raise _provider_error(error) from None
     return parse_model_response(response.text)
 
 

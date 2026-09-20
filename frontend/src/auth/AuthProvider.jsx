@@ -1,10 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   getUserPool,
   makeCognitoUser,
   makeAuthDetails,
   makeAttribute,
   isCognitoConfigured,
+  getSessionUser,
+  clearVigilProofAuthState,
+  clearRetiredCognitoClientState,
 } from './cognitoClient';
 
 const AuthContext = createContext(null);
@@ -18,6 +21,7 @@ export function useAuth() {
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);   // { email, name, sub, emailVerified }
   const [loading, setLoading] = useState(true);    // session restoration in progress
+  const sessionRestoreStarted = useRef(false);
 
   function restoreSession() {
     const pool = getUserPool();
@@ -34,31 +38,28 @@ export function AuthProvider({ children }) {
 
     cognitoUser.getSession((err, session) => {
       if (err || !session?.isValid()) {
+        clearVigilProofAuthState();
         setUser(null);
         setLoading(false);
         return;
       }
 
-      cognitoUser.getUserAttributes((attrErr, attributes) => {
-        if (attrErr) {
-          // Session valid but can't get attrs — still treat as logged in
-          setUser({ email: cognitoUser.getUsername(), name: '', sub: '', emailVerified: false });
-        } else {
-          const attrMap = {};
-          attributes.forEach(a => { attrMap[a.Name] = a.Value; });
-          setUser({
-            email:         attrMap['email'] || cognitoUser.getUsername(),
-            name:          attrMap['name'] || attrMap['custom:display_name'] || '',
-            sub:           attrMap['sub'] || '',
-            emailVerified: attrMap['email_verified'] === 'true',
-          });
-        }
+      try {
+        setUser(getSessionUser(session, cognitoUser.getUsername()));
+      } catch {
+        cognitoUser.signOut();
+        clearVigilProofAuthState();
+        setUser(null);
+      } finally {
         setLoading(false);
-      });
+      }
     });
   }
 
   useEffect(() => {
+    if (sessionRestoreStarted.current) return;
+    sessionRestoreStarted.current = true;
+    clearRetiredCognitoClientState();
     restoreSession();
   }, []);
 
@@ -210,7 +211,7 @@ export function AuthProvider({ children }) {
           setUser(null);
           return resolve(null);
         }
-        resolve(session.getIdToken().getJwtToken());
+        resolve(session.getAccessToken().getJwtToken());
       });
     });
   }, []);

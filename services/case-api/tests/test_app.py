@@ -19,7 +19,8 @@ os.environ['AWS_SESSION_TOKEN'] = 'testing'
 from app import (
     create_case_handler,
     get_case_handler,
-    analyze_case_handler
+    analyze_case_handler,
+    lambda_handler,
 )
 
 
@@ -84,6 +85,39 @@ def test_unauthenticated_requests(dynamodb):
     assert analyze_case_handler({'pathParameters': {'caseId': '123'}}, {})['statusCode'] == 401
 
 
+def test_lambda_handler_routes_requests(dynamodb):
+    response = lambda_handler(
+        {
+            'rawPath': '/cases',
+            'requestContext': {
+                'http': {'method': 'POST', 'path': '/cases'},
+                'authorizer': {'jwt': {'claims': {'sub': 'test-user'}}},
+            },
+        },
+        {},
+    )
+
+    assert response['statusCode'] == 201
+
+    health = lambda_handler({'rawPath': '/health', 'requestContext': {'http': {'method': 'GET', 'path': '/health'}}}, {})
+    assert health['statusCode'] == 200
+
+
+@patch('app.analyze_case_handler')
+@patch('app.get_case_handler')
+def test_lambda_handler_routes_case_operations(get_case, analyze_case):
+    get_case.return_value = {'statusCode': 200}
+    analyze_case.return_value = {'statusCode': 200}
+
+    get_response = lambda_handler({'rawPath': '/cases/case-id', 'requestContext': {'http': {'method': 'GET'}}}, {})
+    analyze_response = lambda_handler({'rawPath': '/cases/case-id/analyze', 'requestContext': {'http': {'method': 'POST'}}}, {})
+
+    assert get_response['statusCode'] == 200
+    assert analyze_response['statusCode'] == 200
+    get_case.assert_called_once()
+    analyze_case.assert_called_once()
+
+
 def test_create_case(dynamodb, s3):
     response = create_case_handler(auth_event(sub="user123"), {})
 
@@ -93,7 +127,7 @@ def test_create_case(dynamodb, s3):
     assert 'caseId' in body
     assert body['status'] == 'CREATED'
     assert 'uploadUrl' in body
-    assert 'test-evidence-bucket.s3.amazonaws.com/cases/' in body['uploadUrl']
+    assert 'test-evidence-bucket.s3.us-east-1.amazonaws.com/cases/' in body['uploadUrl']
     assert body['objectKey'] == f"cases/{body['caseId']}/input"
 
     # Verify persistence
@@ -207,6 +241,10 @@ def test_successful_analyze_flow(mock_invoke, dynamodb, s3):
     assert body['risk']['level'] == 'MODERATE'
     assert body['risk']['evidenceScore'] == 45
     assert [signal['code'] for signal in body['risk']['signals']] == ['OTP_REQUEST', 'PAYMENT_REQUEST']
+
+    get_response = get_case_handler(auth_event(pathParameters={'caseId': case_id}), {})
+    assert get_response['statusCode'] == 200
+    assert json.loads(get_response['body'])['risk']['evidenceScore'] == 45
 
     invocation = json.loads(mock_invoke.call_args.kwargs['Payload'])
     assert invocation == {
