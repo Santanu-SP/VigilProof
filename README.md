@@ -1,9 +1,9 @@
 # VigilProof
-VigilProof is an evidence-first cyber-fraud investigation system that safely investigates suspicious screenshots, messages and URLs before the user takes action. Gemini extracts observable evidence; the deterministic risk engine produces the evidence score and explanation.
+VigilProof is an evidence-first cyber-fraud investigation system that safely investigates suspicious screenshots, PDFs, and links before the user takes action. Gemini extracts observable evidence from uploaded files; the deterministic risk engine produces the evidence score and explanation.
 
 ## Runtime architecture
 
-The React client calls the authenticated Case API. The API keeps uploaded evidence in a private S3 bucket and invokes the extractor Lambda, which sends validated image bytes to Gemini 3.8 Flash and validates the resulting `Evidence` contract before deterministic scoring. The browser never receives or calls Gemini with an API key.
+The React client calls the authenticated Case API. The API keeps uploaded image and PDF evidence in a private S3 bucket and invokes the extractor Lambda, which sends validated bytes to Gemini 3.8 Flash and validates the resulting `Evidence` contract before deterministic scoring. Link investigations do not navigate to the target: they perform DNS-based public-address validation and deterministic static URL analysis. The browser never receives or calls Gemini with an API key.
 
 For the public demo, use synthetic or redacted material only. Do not upload passwords, OTPs, financial credentials, government IDs, or other sensitive personal information.
 

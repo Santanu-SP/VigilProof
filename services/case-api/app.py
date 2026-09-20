@@ -3,6 +3,7 @@ import os
 import sys
 import uuid
 import logging
+import asyncio
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -13,8 +14,15 @@ from botocore.exceptions import ClientError
 RISK_ENGINE_ROOT = Path(__file__).resolve().parents[1] / 'risk-engine'
 if str(RISK_ENGINE_ROOT) not in sys.path:
     sys.path.insert(0, str(RISK_ENGINE_ROOT))
+BROWSER_APP_ROOT = Path(__file__).resolve().parents[1] / 'browser-investigator' / 'app'
+if BROWSER_APP_ROOT.exists() and str(BROWSER_APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(BROWSER_APP_ROOT))
 
-from risk_engine import assess_risk
+from risk_engine import assess_risk, analyze_url
+from url_safety import UnsafeUrlError, validate_public_url
+
+INPUT_TYPES = {'IMAGE', 'PDF', 'URL'}
+MAX_URL_LENGTH = 2048
 
 class UnauthorizedError(Exception):
     pass
@@ -113,8 +121,11 @@ def _validate_uuid(val):
     except ValueError:
         return False
 
-def _invoke_risk_engine(evidence):
-    return assess_risk({"evidence": evidence})
+def _invoke_risk_engine(evidence, url_analysis=None):
+    payload = {"evidence": evidence}
+    if url_analysis is not None:
+        payload["urlAnalysis"] = url_analysis
+    return assess_risk(payload)
 
 def _invoke_ai_extractor(case_id: str):
     if not AI_EXTRACTOR_FUNCTION_NAME or AI_EXTRACTOR_FUNCTION_NAME == "STUB":
@@ -175,8 +186,8 @@ def _queue_analysis(case_id: str):
     )
 
 
-def _complete_analysis(table, case_id: str, evidence: dict, model_id: str | None):
-    risk = _invoke_risk_engine(evidence)
+def _complete_analysis(table, case_id: str, evidence: dict, model_id: str | None, url_analysis=None):
+    risk = _invoke_risk_engine(evidence, url_analysis)
     update_expr = "SET #s = :s, #e = :e, analysisModel = :model REMOVE analysisStartedAt"
     expr_names = {'#s': 'status', '#e': 'evidence'}
     expr_vals = {':s': 'COMPLETED', ':e': evidence, ':model': model_id or 'unknown'}
@@ -221,9 +232,19 @@ def analysis_worker_handler(event, context):
                 raise
 
             try:
-                evidence, model_id = _invoke_ai_extractor(case_id)
-                _complete_analysis(table, case_id, evidence, model_id)
-                logger.info("caseId=%s provider=gemini model=%s result=completed", case_id, model_id or 'unknown')
+                if item.get('inputType', 'IMAGE') == 'URL':
+                    source_url = item.get('sourceUrl', '')
+                    url_analysis = [analyze_url(source_url)]
+                    evidence = {
+                        'messageText': '', 'claimedOrganization': None, 'urls': [source_url], 'phoneNumbers': [], 'upiIds': [], 'amounts': [],
+                        'asksForPayment': False, 'asksForOtp': False, 'asksForPassword': False, 'threatLanguage': [], 'urgencyLanguage': [],
+                    }
+                    _complete_analysis(table, case_id, evidence, 'static-url-analysis', url_analysis)
+                    logger.info("caseId=%s provider=static-url result=completed", case_id)
+                else:
+                    evidence, model_id = _invoke_ai_extractor(case_id)
+                    _complete_analysis(table, case_id, evidence, model_id)
+                    logger.info("caseId=%s provider=gemini model=%s result=completed", case_id, model_id or 'unknown')
             except ProviderError as error:
                 table.update_item(
                     Key={'caseId': case_id},
@@ -247,6 +268,23 @@ def create_case_handler(event, context):
     try:
         owner_sub = get_authenticated_user(event)
 
+        try:
+            request_body = json.loads(event.get('body') or '{}')
+        except (TypeError, json.JSONDecodeError):
+            return _build_response(400, {'error': 'Invalid request body'})
+        input_type = str(request_body.get('inputType', 'IMAGE')).upper()
+        if input_type not in INPUT_TYPES:
+            return _build_response(400, {'error': 'Unsupported input type'})
+        source_url = ''
+        if input_type == 'URL':
+            source_url = str(request_body.get('url', '')).strip()
+            if not source_url or len(source_url) > MAX_URL_LENGTH:
+                return _build_response(400, {'error': 'A valid URL is required'})
+            try:
+                asyncio.run(validate_public_url(source_url))
+            except (UnsafeUrlError, ValueError):
+                return _build_response(400, {'error': 'This URL cannot be investigated safely'})
+
         case_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
         expire_at = int((now + timedelta(days=7)).timestamp())
@@ -256,11 +294,16 @@ def create_case_handler(event, context):
             Item={
                 'caseId': case_id,
                 'ownerSub': owner_sub,
+                'inputType': input_type,
                 'status': 'CREATED',
                 'createdAt': now.isoformat(),
                 'expireAt': expire_at
             }
         )
+
+        if input_type == 'URL':
+            table.update_item(Key={'caseId': case_id}, UpdateExpression='SET sourceUrl = :url', ExpressionAttributeValues={':url': source_url})
+            return _build_response(201, {'caseId': case_id, 'status': 'CREATED', 'inputType': input_type})
 
         object_key = f"cases/{case_id}/input"
         upload_url = s3_client.generate_presigned_url(
@@ -274,7 +317,7 @@ def create_case_handler(event, context):
 
         return _build_response(201, {
             "caseId": case_id,
-            "status": "CREATED",
+            "status": "CREATED", "inputType": input_type,
             "uploadUrl": upload_url,
             "objectKey": object_key
         })
@@ -313,15 +356,22 @@ def analyze_case_handler(event, context):
         if item.get('status') == 'COMPLETED':
             return _build_response(409, {"error": "Case is already completed"})
 
-        object_key = f"cases/{case_id}/input"
-        try:
-            s3_client.head_object(Bucket=EVIDENCE_BUCKET, Key=object_key)
-        except ClientError as e:
-            if e.response['Error']['Code'] == '404':
-                return _build_response(400, {"error": "Evidence not uploaded yet"})
-            raise
+        if item.get('inputType', 'IMAGE') != 'URL':
+            object_key = f"cases/{case_id}/input"
+            try:
+                object_metadata = s3_client.head_object(Bucket=EVIDENCE_BUCKET, Key=object_key)
+            except ClientError as e:
+                if e.response['Error']['Code'] == '404':
+                    return _build_response(400, {"error": "Evidence not uploaded yet"})
+                raise
+            content_type = object_metadata.get('ContentType', '').split(';', 1)[0].lower()
+            allowed_types = {'image/png', 'image/jpeg', 'image/webp'}
+            if item.get('inputType', 'IMAGE') == 'PDF':
+                allowed_types = {'application/pdf'}
+            if content_type not in allowed_types or not object_metadata.get('ContentLength'):
+                return _build_response(400, {'error': 'Evidence type is not supported'})
 
-        if not AI_ENABLED:
+        if item.get('inputType', 'IMAGE') != 'URL' and not AI_ENABLED:
             return _build_response(503, {
                 "code": "AI_PROVIDER_UNAVAILABLE",
                 "error": "Evidence analysis is temporarily unavailable.",
@@ -392,7 +442,8 @@ def get_case_handler(event, context):
         body = {
             "caseId": item.get('caseId'),
             "status": item.get('status', 'CREATED'),
-            "inputType": item.get('inputType', 'image'),
+            "inputType": item.get('inputType', 'IMAGE'),
+            "sourceUrl": item.get('sourceUrl'),
             "evidence": item.get('evidence', {
                 "messageText": "",
                 "claimedOrganization": "",

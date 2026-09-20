@@ -35,14 +35,13 @@ async function fetchWithAuth(url, options = {}) {
   return fetch(url, { ...options, headers });
 }
 
-export async function createCase() {
+export async function createCase(inputType = 'IMAGE', url = '') {
   if (isMockMode) return mockCreateCase();
 
   const response = await fetchWithAuth(`${getBaseUrl()}/cases`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    }
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ inputType, ...(inputType === 'URL' ? { url } : {}) }),
   });
 
   if (!response.ok) {

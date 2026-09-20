@@ -18,8 +18,11 @@ import {
 const POOL_ID     = import.meta.env.VITE_COGNITO_USER_POOL_ID     || '';
 const CLIENT_ID   = import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID || '';
 const DOMAIN      = import.meta.env.VITE_COGNITO_DOMAIN            || '';
-const REDIRECT_IN = import.meta.env.VITE_COGNITO_REDIRECT_SIGN_IN  || window.location.origin + '/login';
-const REDIRECT_OUT= import.meta.env.VITE_COGNITO_REDIRECT_SIGN_OUT || window.location.origin;
+// Cognito redirects must always return to the browser origin currently serving
+// the app. This keeps local development local and Amplify production on HTTPS.
+const APP_ORIGIN = window.location.origin;
+const REDIRECT_IN = `${APP_ORIGIN}/login`;
+const REDIRECT_OUT = `${APP_ORIGIN}/`;
 const RETIRED_CLIENT_IDS = ['97bgdps0ok5a3nb4ocd4ukpjv'];
 
 let googleLoginCompletion = null;

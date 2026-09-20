@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { UploadCloud, FileImage, X, Search, Target, ArrowRight } from 'lucide-react';
+import { UploadCloud, FileImage, FileText, Link, X, Search, Target, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const MagneticButton = ({ onClick, children, disabled }) => {
@@ -65,6 +65,10 @@ const MagneticButton = ({ onClick, children, disabled }) => {
 
 export default function UploadPanel({
   file,
+  inputType,
+  setInputType,
+  url,
+  setUrl,
   dragActive,
   handleDrag,
   handleDrop,
@@ -77,11 +81,32 @@ export default function UploadPanel({
   const [isHovered, setIsHovered] = useState(false);
 
   const isActive = isHovered || dragActive;
+  const isLink = inputType === 'URL';
+  const accept = inputType === 'PDF' ? 'application/pdf' : 'image/png,image/jpeg,image/webp,image/gif';
 
   return (
     <div id="inspect" className="w-full">
+      <div className="mb-4 grid grid-cols-3 gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-1">
+        {[
+          ['IMAGE', 'Screenshot', FileImage],
+          ['PDF', 'PDF', FileText],
+          ['URL', 'Link', Link],
+        ].map(([type, label, Icon]) => (
+          <button key={type} type="button" onClick={() => setInputType(type)} disabled={isSubmitting}
+            className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${inputType === type ? 'bg-emerald-400 text-black' : 'text-white/60 hover:bg-white/5'}`}>
+            <Icon size={14} />{label}
+          </button>
+        ))}
+      </div>
       <AnimatePresence mode="wait">
-        {!file ? (
+        {isLink ? (
+          <motion.div key="url-input" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <label className="text-sm font-semibold text-white/80" htmlFor="evidence-url">Suspicious link</label>
+            <input id="evidence-url" type="url" value={url} onChange={event => setUrl(event.target.value)} maxLength={2048}
+              placeholder="https://example.com/verify" className="w-full rounded-xl border border-white/15 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-emerald-400" />
+            <MagneticButton onClick={handleInspect} disabled={isSubmitting || !url.trim()}><Search size={18} />{isSubmitting ? 'Starting investigation…' : 'Inspect evidence'}</MagneticButton>
+          </motion.div>
+        ) : !file ? (
           <motion.div
             key="upload-zone"
             initial={{ opacity: 0, y: 10 }}
@@ -147,7 +172,7 @@ export default function UploadPanel({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
+              accept={accept}
               onChange={handleChange}
               className="hidden"
             />
@@ -191,10 +216,10 @@ export default function UploadPanel({
             </div>
 
             <p style={{ color: 'rgba(255,255,255,0.8)', fontWeight: 600, marginBottom: 6, zIndex: 10, fontSize: '0.95rem' }}>
-              Upload suspicious evidence
+              {inputType === 'PDF' ? 'Upload PDF evidence' : 'Upload suspicious evidence'}
             </p>
             <p style={{ color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace', fontSize: '0.78rem', marginBottom: 4, zIndex: 10 }}>
-              PNG, JPG up to 10MB
+              {inputType === 'PDF' ? 'PDF up to 10MB' : 'PNG, JPG up to 10MB'}
             </p>
             <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '0.72rem', zIndex: 10, fontFamily: 'monospace' }}>
               Drop a screenshot of an email, SMS, or website
@@ -227,7 +252,7 @@ export default function UploadPanel({
                     color: '#22c55e',
                   }}
                 >
-                  <FileImage size={18} />
+                  {inputType === 'PDF' ? <FileText size={18} /> : <FileImage size={18} />}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <span style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: 'rgba(255,255,255,0.8)', fontWeight: 600, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

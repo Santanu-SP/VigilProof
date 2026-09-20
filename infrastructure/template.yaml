@@ -21,6 +21,10 @@ Parameters:
     NoEcho: true
     Default: ""
     Description: Google OAuth client secret; required only when EnableGoogleAuth is true.
+  FrontendOrigin:
+    Type: String
+    Default: https://feat-day3-release.d3vbldm30qj6ji.amplifyapp.com
+    Description: Existing public Amplify origin used for OAuth callbacks and browser CORS.
 
 Conditions:
   GoogleAuthEnabled: !Equals [!Ref EnableGoogleAuth, "true"]
@@ -54,7 +58,7 @@ Resources:
         CorsRules:
           - AllowedHeaders: ["Content-Type"]
             AllowedMethods: [PUT]
-            AllowedOrigins: ["http://localhost:5173", "http://127.0.0.1:5173"]
+            AllowedOrigins: ["http://localhost:5173", "http://127.0.0.1:5173", !Ref FrontendOrigin]
             MaxAge: 300
 
   CasesTable:
@@ -169,8 +173,8 @@ Resources:
       AllowedOAuthFlowsUserPoolClient: true
       AllowedOAuthFlows: [code]
       AllowedOAuthScopes: [openid, email, profile]
-      CallbackURLs: [http://localhost:5173/, http://localhost:5173/login]
-      LogoutURLs: [http://localhost:5173/]
+      CallbackURLs: [http://localhost:5173/, http://localhost:5173/login, !Sub "${FrontendOrigin}/", !Sub "${FrontendOrigin}/login"]
+      LogoutURLs: [http://localhost:5173/, !Sub "${FrontendOrigin}/"]
       SupportedIdentityProviders: [COGNITO]
 
   UserPoolClientGoogle:
@@ -189,8 +193,8 @@ Resources:
       AllowedOAuthFlowsUserPoolClient: true
       AllowedOAuthFlows: [code]
       AllowedOAuthScopes: [openid, email, profile]
-      CallbackURLs: [http://localhost:5173/, http://localhost:5173/login]
-      LogoutURLs: [http://localhost:5173/]
+      CallbackURLs: [http://localhost:5173/, http://localhost:5173/login, !Sub "${FrontendOrigin}/", !Sub "${FrontendOrigin}/login"]
+      LogoutURLs: [http://localhost:5173/, !Sub "${FrontendOrigin}/"]
       SupportedIdentityProviders: [COGNITO, Google]
 
   UserPoolDomain:
@@ -220,7 +224,7 @@ Resources:
       CorsConfiguration:
         AllowHeaders: [Authorization, Content-Type]
         AllowMethods: [GET, POST, OPTIONS]
-        AllowOrigins: [http://localhost:5173, http://127.0.0.1:5173]
+        AllowOrigins: [http://localhost:5173, http://127.0.0.1:5173, !Ref FrontendOrigin]
       Auth:
         DefaultAuthorizer: CognitoJwt
         Authorizers:

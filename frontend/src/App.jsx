@@ -36,6 +36,8 @@ const BUSY_RETRY_MESSAGE = 'Your evidence has been saved. Please retry shortly.'
 
 function InvestigationFlow() {
   const [file, setFile] = useState(null);
+  const [inputType, setInputType] = useState('IMAGE');
+  const [url, setUrl] = useState('');
   const [error, setError] = useState(null);
   const [stage, setStage] = useState('HOME'); // HOME, UPLOADING, PROCESSING, RESULT
   const [statusMessage, setStatusMessage] = useState('');
@@ -61,8 +63,9 @@ function InvestigationFlow() {
     setError(null);
     if (!selectedFile) return false;
 
-    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(selectedFile.type)) {
-      setError('Choose a PNG, JPEG, WebP, or GIF screenshot.');
+    const allowedTypes = inputType === 'PDF' ? ['application/pdf'] : ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(selectedFile.type)) {
+      setError(inputType === 'PDF' ? 'Choose a PDF document.' : 'Choose a PNG, JPEG, WebP, or GIF screenshot.');
       return false;
     }
 
@@ -114,6 +117,14 @@ function InvestigationFlow() {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const selectInputType = (nextInputType) => {
+    beginNewEvidence();
+    setFile(null);
+    setUrl('');
+    setInputType(nextInputType);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const showCompletedCase = (caseData) => {
@@ -178,7 +189,16 @@ function InvestigationFlow() {
   }, []);
 
   const handleInspect = async () => {
-    if (!file || inspectionInFlightRef.current) return;
+    if ((inputType !== 'URL' && !file) || inspectionInFlightRef.current) return;
+    if (inputType === 'URL') {
+      try {
+        const parsed = new URL(url);
+        if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
+      } catch {
+        setError('Enter a valid HTTP or HTTPS link.');
+        return;
+      }
+    }
     inspectionInFlightRef.current = true;
     setIsSubmitting(true);
 
@@ -189,11 +209,12 @@ function InvestigationFlow() {
       setStatusMessage('UPLOADING');
 
       // 1. Create Case
-      const { caseId, uploadUrl } = await createCase();
+      const { caseId, uploadUrl } = await createCase(inputType, url.trim());
       setSavedCaseId(caseId);
 
-      // 2. Upload Evidence
-      await uploadEvidence(uploadUrl, file);
+      if (inputType !== 'URL') {
+        await uploadEvidence(uploadUrl, file);
+      }
 
       // 3. Start Analysis
       setStage('PROCESSING');
@@ -249,6 +270,8 @@ function InvestigationFlow() {
     inspectionInFlightRef.current = false;
     setIsSubmitting(false);
     setFile(null);
+    setUrl('');
+    setInputType('IMAGE');
     setResult(null);
     setSavedCaseId(null);
     setError(null);
@@ -259,7 +282,7 @@ function InvestigationFlow() {
   };
 
   const uploadProps = {
-    file, dragActive, handleDrag, handleDrop, handleChange, handleRemoveFile, handleInspect, fileInputRef, isSubmitting
+    file, inputType, setInputType: selectInputType, url, setUrl, dragActive, handleDrag, handleDrop, handleChange, handleRemoveFile, handleInspect, fileInputRef, isSubmitting
   };
 
   return (

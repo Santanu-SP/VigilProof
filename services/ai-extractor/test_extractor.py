@@ -71,7 +71,7 @@ def test_gemini_client_has_a_bounded_request_timeout(mock_api_key, monkeypatch):
     assert client._api_client._http_options.retry_options.attempts == 1
 
 
-def test_prompt_treats_screenshot_as_untrusted_and_does_not_request_a_verdict():
+def test_prompt_treats_evidence_as_untrusted_and_does_not_request_a_verdict():
     prompt = EXTRACTION_INSTRUCTION.lower()
 
     assert "untrusted data" in prompt
@@ -82,10 +82,22 @@ def test_prompt_treats_screenshot_as_untrusted_and_does_not_request_a_verdict():
 
 @patch("extractor.get_s3_client")
 def test_download_rejects_unsupported_content_type(mock_s3):
-    mock_s3.return_value.get_object.return_value = s3_response(content_type="application/pdf")
+    mock_s3.return_value.get_object.return_value = s3_response(content_type="text/plain")
 
     with pytest.raises(ExtractionError, match="not supported"):
         _download_image_bytes("s3://evidence/cases/1/input")
+
+
+@patch("extractor.get_s3_client")
+def test_download_accepts_pdf_evidence(mock_s3):
+    mock_s3.return_value.get_object.return_value = s3_response(
+        data=b"%PDF-synthetic", content_type="application/pdf"
+    )
+
+    data, mime_type = _download_image_bytes("s3://evidence/cases/1/input")
+
+    assert data == b"%PDF-synthetic"
+    assert mime_type == "application/pdf"
 
 
 @patch("extractor.get_s3_client")
