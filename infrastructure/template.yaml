@@ -1,11 +1,30 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: VigilProof Day-1 AWS foundation
+Transform: AWS::Serverless-2016-10-31
+Description: VigilProof evidence-first serverless application
 
 Parameters:
-  NovaModelId:
+  GeminiApiKeyParameter:
     Type: String
-    Description: Amazon Nova foundation model ID available in the deployment region
-    Default: amazon.nova-lite-v1:0
+    Description: Existing Standard SecureString parameter name for the Gemini API key
+    Default: /vigilproof/prod/gemini-api-key
+  EnableGoogleAuth:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Enable only after the Google OAuth client is configured for the Cognito domain.
+  GoogleClientId:
+    Type: String
+    Default: ""
+    Description: Google OAuth client ID; required only when EnableGoogleAuth is true.
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Google OAuth client secret; required only when EnableGoogleAuth is true.
+
+Conditions:
+  GoogleAuthEnabled: !Equals [!Ref EnableGoogleAuth, "true"]
+  GoogleAuthDisabled: !Not [!Condition GoogleAuthEnabled]
 
 Resources:
   EvidenceBucket:
@@ -26,10 +45,17 @@ Resources:
         Status: Enabled
       LifecycleConfiguration:
         Rules:
-          - Id: AbortIncompleteMultipartUploads
+          - Id: DeleteHackathonEvidence
             Status: Enabled
+            ExpirationInDays: 7
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: 7
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ["Content-Type"]
+            AllowedMethods: [PUT]
+            AllowedOrigins: ["http://localhost:5173", "http://127.0.0.1:5173"]
+            MaxAge: 300
 
   CasesTable:
     Type: AWS::DynamoDB::Table
@@ -93,12 +119,6 @@ Resources:
                   - dynamodb:PutItem
                   - dynamodb:UpdateItem
                 Resource: !GetAtt CasesTable.Arn
-              - Sid: InvokeNova
-                Effect: Allow
-                Action:
-                  - bedrock:InvokeModel
-                  - bedrock:InvokeModelWithResponseStream
-                Resource: !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/${NovaModelId}"
               - Sid: ManageBuiltInBrowserSessions
                 Effect: Allow
                 Action:
@@ -117,6 +137,210 @@ Resources:
                   - logs:PutLogEvents
                 Resource: !Sub "${ApplicationLogGroup.Arn}:*"
 
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: vigilproof-users
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 10
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          TemporaryPasswordValidityDays: 7
+      EmailConfiguration:
+        EmailSendingAccount: COGNITO_DEFAULT
+
+  UserPoolClientCore:
+    Type: AWS::Cognito::UserPoolClient
+    Condition: GoogleAuthDisabled
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: vigilproof-spa
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      PreventUserExistenceErrors: ENABLED
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email, profile]
+      CallbackURLs: [http://localhost:5173/, http://localhost:5173/login]
+      LogoutURLs: [http://localhost:5173/]
+      SupportedIdentityProviders: [COGNITO]
+
+  UserPoolClientGoogle:
+    Type: AWS::Cognito::UserPoolClient
+    Condition: GoogleAuthEnabled
+    DependsOn: GoogleIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: vigilproof-spa
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      PreventUserExistenceErrors: ENABLED
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email, profile]
+      CallbackURLs: [http://localhost:5173/, http://localhost:5173/login]
+      LogoutURLs: [http://localhost:5173/]
+      SupportedIdentityProviders: [COGNITO, Google]
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "vigilproof-${AWS::AccountId}-${AWS::Region}"
+      UserPoolId: !Ref UserPool
+
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Condition: GoogleAuthEnabled
+    Properties:
+      ProviderName: Google
+      ProviderType: Google
+      UserPoolId: !Ref UserPool
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: openid email profile
+      AttributeMapping:
+        email: email
+        name: name
+
+  VigilProofHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowHeaders: [Authorization, Content-Type]
+        AllowMethods: [GET, POST, OPTIONS]
+        AllowOrigins: [http://localhost:5173, http://127.0.0.1:5173]
+      Auth:
+        DefaultAuthorizer: CognitoJwt
+        Authorizers:
+          CognitoJwt:
+            JwtConfiguration:
+              Audience: !If [GoogleAuthEnabled, [!Ref UserPoolClientGoogle], [!Ref UserPoolClientCore]]
+              Issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
+            IdentitySource: "$request.header.Authorization"
+
+  CaseApiFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../services/case-api/
+      Handler: app.lambda_handler
+      Runtime: python3.12
+      Architectures: [arm64]
+      Timeout: 29
+      MemorySize: 256
+      Environment:
+        Variables:
+          EVIDENCE_BUCKET: !Ref EvidenceBucket
+          CASES_TABLE: !Ref CasesTable
+          AI_EXTRACTOR_FUNCTION_NAME: !Ref ExtractorFunction
+          ANALYSIS_QUEUE_URL: !Ref AnalysisQueue
+          AI_ENABLED: "true"
+      Policies:
+        - S3WritePolicy:
+            BucketName: !Ref EvidenceBucket
+        - S3ReadPolicy:
+            BucketName: !Ref EvidenceBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CasesTable
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ExtractorFunction
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt AnalysisQueue.QueueName
+      Events:
+        CreateCase:
+          Type: HttpApi
+          Properties: {ApiId: !Ref VigilProofHttpApi, Path: /cases, Method: POST}
+        GetCase:
+          Type: HttpApi
+          Properties: {ApiId: !Ref VigilProofHttpApi, Path: "/cases/{caseId}", Method: GET}
+        AnalyzeCase:
+          Type: HttpApi
+          Properties: {ApiId: !Ref VigilProofHttpApi, Path: "/cases/{caseId}/analyze", Method: POST}
+        Health:
+          Type: HttpApi
+          Properties: {ApiId: !Ref VigilProofHttpApi, Path: /health, Method: GET, Auth: {Authorizer: NONE}}
+
+  AnalysisQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      SqsManagedSseEnabled: true
+      VisibilityTimeout: 90
+      MessageRetentionPeriod: 900
+
+  AnalysisWorkerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../services/case-api/
+      Handler: app.analysis_worker_handler
+      Runtime: python3.12
+      Architectures: [arm64]
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          EVIDENCE_BUCKET: !Ref EvidenceBucket
+          CASES_TABLE: !Ref CasesTable
+          AI_EXTRACTOR_FUNCTION_NAME: !Ref ExtractorFunction
+          ANALYSIS_QUEUE_URL: !Ref AnalysisQueue
+          AI_ENABLED: "true"
+          ANALYSIS_MAX_ATTEMPTS: "3"
+          ANALYSIS_RETRY_DELAY_SECONDS: "30"
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref EvidenceBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CasesTable
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ExtractorFunction
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt AnalysisQueue.QueueName
+      Events:
+        AnalysisQueueEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt AnalysisQueue.Arn
+            BatchSize: 1
+
+  ExtractorFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../services/ai-extractor/
+      Handler: extractor.handler
+      Runtime: python3.12
+      Architectures: [arm64]
+      Timeout: 25
+      MemorySize: 512
+      Environment:
+        Variables:
+          AI_PROVIDER: gemini
+          GEMINI_MODEL_ID: gemini-3.8-flash
+          GEMINI_REQUEST_TIMEOUT_MS: "10000"
+          GEMINI_API_KEY_PARAMETER: !Ref GeminiApiKeyParameter
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref EvidenceBucket
+        - Statement:
+            Effect: Allow
+            Action: ssm:GetParameter
+            Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${GeminiApiKeyParameter}"
+
 Outputs:
   EvidenceBucketName:
     Value: !Ref EvidenceBucket
@@ -126,3 +350,15 @@ Outputs:
     Value: !GetAtt LambdaExecutionRole.Arn
   ApplicationLogGroupName:
     Value: !Ref ApplicationLogGroup
+  ApiBaseUrl:
+    Value: !Sub "https://${VigilProofHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !If [GoogleAuthEnabled, !Ref UserPoolClientGoogle, !Ref UserPoolClientCore]
+  CognitoDomain:
+    Value: !Sub "${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com"
+  CaseApiFunctionName:
+    Value: !Ref CaseApiFunction
+  ExtractorFunctionName:
+    Value: !Ref ExtractorFunction

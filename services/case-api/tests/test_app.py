@@ -2,6 +2,7 @@ import os
 import json
 import pytest
 import boto3
+import sys
 from moto import mock_aws
 from unittest.mock import patch, MagicMock
 
@@ -10,6 +11,7 @@ os.environ['AWS_REGION'] = 'us-east-1'
 os.environ['EVIDENCE_BUCKET'] = 'test-evidence-bucket'
 os.environ['CASES_TABLE'] = 'test-cases-table'
 os.environ['AI_EXTRACTOR_FUNCTION_NAME'] = 'test-extractor'
+os.environ['ANALYSIS_QUEUE_URL'] = 'https://sqs.us-east-1.amazonaws.com/123456789012/test-analysis-queue'
 os.environ['AWS_ACCESS_KEY_ID'] = 'testing'
 os.environ['AWS_SECRET_ACCESS_KEY'] = 'testing'
 os.environ['AWS_SECURITY_TOKEN'] = 'testing'
@@ -18,14 +20,40 @@ os.environ['AWS_SESSION_TOKEN'] = 'testing'
 from app import (
     create_case_handler,
     get_case_handler,
-    analyze_case_handler
+    analyze_case_handler,
+    analysis_worker_handler,
+    lambda_handler,
 )
+
+
+@pytest.fixture(autouse=True)
+def ai_enabled_for_extractor_tests(monkeypatch):
+    monkeypatch.setattr('app.AI_ENABLED', True)
+
+
+def auth_event(sub="test-user", **kwargs):
+    event = {
+        "requestContext": {
+            "authorizer": {"jwt": {"claims": {"sub": sub}}}
+        }
+    }
+    event.update(kwargs)
+    return event
 
 
 def lambda_response(evidence, status_code=200):
     body = {"caseId": "extractor-case", "evidence": evidence}
     stream = MagicMock()
     stream.read.return_value = json.dumps({"statusCode": status_code, "body": json.dumps(body)}).encode('utf-8')
+    return {'Payload': stream}
+
+
+def lambda_error_response(code, error):
+    stream = MagicMock()
+    stream.read.return_value = json.dumps({
+        "statusCode": 422,
+        "body": json.dumps({"code": code, "error": error}),
+    }).encode('utf-8')
     return {'Payload': stream}
 
 @pytest.fixture(scope='function')
@@ -62,8 +90,47 @@ def s3(aws_credentials):
         s3.create_bucket(Bucket='test-evidence-bucket')
         yield s3
 
+def test_unauthenticated_requests(dynamodb):
+    assert create_case_handler({}, {})['statusCode'] == 401
+    assert get_case_handler({'pathParameters': {'caseId': '123'}}, {})['statusCode'] == 401
+    assert analyze_case_handler({'pathParameters': {'caseId': '123'}}, {})['statusCode'] == 401
+
+
+def test_lambda_handler_routes_requests(dynamodb):
+    response = lambda_handler(
+        {
+            'rawPath': '/cases',
+            'requestContext': {
+                'http': {'method': 'POST', 'path': '/cases'},
+                'authorizer': {'jwt': {'claims': {'sub': 'test-user'}}},
+            },
+        },
+        {},
+    )
+
+    assert response['statusCode'] == 201
+
+    health = lambda_handler({'rawPath': '/health', 'requestContext': {'http': {'method': 'GET', 'path': '/health'}}}, {})
+    assert health['statusCode'] == 200
+
+
+@patch('app.analyze_case_handler')
+@patch('app.get_case_handler')
+def test_lambda_handler_routes_case_operations(get_case, analyze_case):
+    get_case.return_value = {'statusCode': 200}
+    analyze_case.return_value = {'statusCode': 200}
+
+    get_response = lambda_handler({'rawPath': '/cases/case-id', 'requestContext': {'http': {'method': 'GET'}}}, {})
+    analyze_response = lambda_handler({'rawPath': '/cases/case-id/analyze', 'requestContext': {'http': {'method': 'POST'}}}, {})
+
+    assert get_response['statusCode'] == 200
+    assert analyze_response['statusCode'] == 200
+    get_case.assert_called_once()
+    analyze_case.assert_called_once()
+
+
 def test_create_case(dynamodb, s3):
-    response = create_case_handler({}, {})
+    response = create_case_handler(auth_event(sub="user123"), {})
 
     assert response['statusCode'] == 201
     body = json.loads(response['body'])
@@ -71,7 +138,7 @@ def test_create_case(dynamodb, s3):
     assert 'caseId' in body
     assert body['status'] == 'CREATED'
     assert 'uploadUrl' in body
-    assert 'test-evidence-bucket.s3.amazonaws.com/cases/' in body['uploadUrl']
+    assert 'test-evidence-bucket.s3.us-east-1.amazonaws.com/cases/' in body['uploadUrl']
     assert body['objectKey'] == f"cases/{body['caseId']}/input"
 
     # Verify persistence
@@ -79,15 +146,27 @@ def test_create_case(dynamodb, s3):
     item = table.get_item(Key={'caseId': body['caseId']})['Item']
 
     assert item['caseId'] == body['caseId']
+    assert item['ownerSub'] == 'user123'
     assert item['status'] == 'CREATED'
     assert 'createdAt' in item
     assert 'expireAt' in item
 
+
+@patch('app.s3_client.generate_presigned_url')
+def test_create_case_does_not_pin_upload_content_type(mock_presign, dynamodb):
+    mock_presign.return_value = 'https://example.invalid/upload'
+
+    response = create_case_handler(auth_event(), {})
+
+    assert response['statusCode'] == 201
+    params = mock_presign.call_args.kwargs['Params']
+    assert set(params) == {'Bucket', 'Key'}
+
 def test_get_existing_case(dynamodb, s3):
-    create_response = create_case_handler({}, {})
+    create_response = create_case_handler(auth_event(sub="owner-sub"), {})
     case_id = json.loads(create_response['body'])['caseId']
 
-    get_response = get_case_handler({'pathParameters': {'caseId': case_id}}, {})
+    get_response = get_case_handler(auth_event(sub="owner-sub", pathParameters={'caseId': case_id}), {})
     assert get_response['statusCode'] == 200
 
     body = json.loads(get_response['body'])
@@ -98,22 +177,51 @@ def test_get_existing_case(dynamodb, s3):
     assert 'risk' in body
     assert body['error'] is None
 
+def test_get_forbidden_case(dynamodb, s3):
+    create_response = create_case_handler(auth_event(sub="owner-sub"), {})
+    case_id = json.loads(create_response['body'])['caseId']
+
+    get_response = get_case_handler(auth_event(sub="hacker-sub", pathParameters={'caseId': case_id}), {})
+    assert get_response['statusCode'] == 403
+
+def test_legacy_ownerless_case(dynamodb):
+    # Manually insert legacy case
+    table = dynamodb.Table('test-cases-table')
+    legacy_id = '123e4567-e89b-12d3-a456-426614174000'
+    table.put_item(Item={'caseId': legacy_id, 'status': 'CREATED'})
+
+    get_response = get_case_handler(auth_event(sub="some-user", pathParameters={'caseId': legacy_id}), {})
+    assert get_response['statusCode'] == 403
+
 def test_get_missing_case(dynamodb):
-    get_response = get_case_handler({'pathParameters': {'caseId': '123e4567-e89b-12d3-a456-426614174000'}}, {})
+    get_response = get_case_handler(auth_event(pathParameters={'caseId': '123e4567-e89b-12d3-a456-426614174000'}), {})
     assert get_response['statusCode'] == 404
     body = json.loads(get_response['body'])
     assert body['error'] == 'Case not found'
 
 def test_malformed_case_id(dynamodb):
-    get_response = get_case_handler({'pathParameters': {'caseId': 'not-a-uuid'}}, {})
+    get_response = get_case_handler(auth_event(pathParameters={'caseId': 'not-a-uuid'}), {})
     assert get_response['statusCode'] == 400
 
-    analyze_response = analyze_case_handler({'pathParameters': {'caseId': 'not-a-uuid'}}, {})
+    analyze_response = analyze_case_handler(auth_event(pathParameters={'caseId': 'not-a-uuid'}), {})
     assert analyze_response['statusCode'] == 400
 
+
+def test_analyze_forbidden_case(dynamodb, s3):
+    create_response = create_case_handler(auth_event(sub="owner-sub"), {})
+    case_id = json.loads(create_response['body'])['caseId']
+    s3.put_object(Bucket='test-evidence-bucket', Key=f"cases/{case_id}/input", Body=b'dummy')
+
+    response = analyze_case_handler(
+        auth_event(sub="other-user", pathParameters={'caseId': case_id}),
+        {},
+    )
+    assert response['statusCode'] == 403
+
+@patch('app.sqs_client.send_message')
 @patch('app.lambda_client.invoke')
-def test_successful_analyze_flow(mock_invoke, dynamodb, s3):
-    create_response = create_case_handler({}, {})
+def test_successful_analyze_flow(mock_invoke, mock_send, dynamodb, s3):
+    create_response = create_case_handler(auth_event(), {})
     case_id = json.loads(create_response['body'])['caseId']
 
     # Upload dummy file to S3
@@ -136,15 +244,22 @@ def test_successful_analyze_flow(mock_invoke, dynamodb, s3):
 
     mock_invoke.return_value = lambda_response(mock_payload)
 
-    analyze_response = analyze_case_handler({'pathParameters': {'caseId': case_id}}, {})
+    analyze_response = analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})
 
-    assert analyze_response['statusCode'] == 200
+    assert analyze_response['statusCode'] == 202
     body = json.loads(analyze_response['body'])
-    assert body['status'] == 'COMPLETED'
-    assert body['evidence']['messageText'] == 'Hello'
-    assert body['risk']['level'] == 'MODERATE'
-    assert body['risk']['evidenceScore'] == 45
-    assert [signal['code'] for signal in body['risk']['signals']] == ['OTP_REQUEST', 'PAYMENT_REQUEST']
+    assert body['status'] == 'PROCESSING'
+    assert json.loads(mock_send.call_args.kwargs['MessageBody']) == {'caseId': case_id}
+
+    analysis_worker_handler({'Records': [{'body': json.dumps({'caseId': case_id})}]}, {})
+
+    get_response = get_case_handler(auth_event(pathParameters={'caseId': case_id}), {})
+    assert get_response['statusCode'] == 200
+    get_body = json.loads(get_response['body'])
+    assert get_body['evidence']['messageText'] == 'Hello'
+    assert get_body['risk']['level'] == 'MODERATE'
+    assert get_body['risk']['evidenceScore'] == 45
+    assert [signal['code'] for signal in get_body['risk']['signals']] == ['OTP_REQUEST', 'PAYMENT_REQUEST']
 
     invocation = json.loads(mock_invoke.call_args.kwargs['Payload'])
     assert invocation == {
@@ -160,34 +275,49 @@ def test_successful_analyze_flow(mock_invoke, dynamodb, s3):
     assert item['risk']['evidenceScore'] == 45
 
 def test_analyze_missing_evidence(dynamodb, s3):
-    create_response = create_case_handler({}, {})
+    create_response = create_case_handler(auth_event(), {})
     case_id = json.loads(create_response['body'])['caseId']
 
     # Call without uploading file to S3
-    analyze_response = analyze_case_handler({'pathParameters': {'caseId': case_id}}, {})
+    analyze_response = analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})
     assert analyze_response['statusCode'] == 400
     body = json.loads(analyze_response['body'])
     assert body['error'] == 'Evidence not uploaded yet'
 
+
+def test_analysis_is_unavailable_when_ai_is_disabled(dynamodb, s3, monkeypatch):
+    monkeypatch.setattr('app.AI_ENABLED', False)
+    create_response = create_case_handler(auth_event(), {})
+    case_id = json.loads(create_response['body'])['caseId']
+    s3.put_object(Bucket='test-evidence-bucket', Key=f"cases/{case_id}/input", Body=b'dummy')
+
+    response = analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})
+
+    assert response['statusCode'] == 503
+    assert json.loads(response['body'])['code'] == 'AI_PROVIDER_UNAVAILABLE'
+
+@patch('app.sqs_client.send_message')
 @patch('app.lambda_client.invoke')
-def test_analyze_extractor_exception(mock_invoke, dynamodb, s3):
-    create_response = create_case_handler({}, {})
+def test_analyze_extractor_exception(mock_invoke, mock_send, dynamodb, s3):
+    create_response = create_case_handler(auth_event(), {})
     case_id = json.loads(create_response['body'])['caseId']
     s3.put_object(Bucket='test-evidence-bucket', Key=f"cases/{case_id}/input", Body=b'dummy')
 
     mock_invoke.return_value = {'FunctionError': 'Unhandled'}
 
-    analyze_response = analyze_case_handler({'pathParameters': {'caseId': case_id}}, {})
-    assert analyze_response['statusCode'] == 500
+    analyze_response = analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})
+    assert analyze_response['statusCode'] == 202
+    analysis_worker_handler({'Records': [{'body': json.dumps({'caseId': case_id})}]}, {})
 
     table = dynamodb.Table('test-cases-table')
     item = table.get_item(Key={'caseId': case_id})['Item']
     assert item['status'] == 'FAILED'
     assert 'error' in item
 
+@patch('app.sqs_client.send_message')
 @patch('app.lambda_client.invoke')
-def test_analyze_malformed_extractor_output(mock_invoke, dynamodb, s3):
-    create_response = create_case_handler({}, {})
+def test_analyze_malformed_extractor_output(mock_invoke, mock_send, dynamodb, s3):
+    create_response = create_case_handler(auth_event(), {})
     case_id = json.loads(create_response['body'])['caseId']
     s3.put_object(Bucket='test-evidence-bucket', Key=f"cases/{case_id}/input", Body=b'dummy')
 
@@ -195,40 +325,65 @@ def test_analyze_malformed_extractor_output(mock_invoke, dynamodb, s3):
     mock_payload = {"messageText": "Hello"}
     mock_invoke.return_value = lambda_response(mock_payload)
 
-    analyze_response = analyze_case_handler({'pathParameters': {'caseId': case_id}}, {})
-    assert analyze_response['statusCode'] == 500
+    analyze_response = analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})
+    assert analyze_response['statusCode'] == 202
+    analysis_worker_handler({'Records': [{'body': json.dumps({'caseId': case_id})}]}, {})
 
     table = dynamodb.Table('test-cases-table')
     item = table.get_item(Key={'caseId': case_id})['Item']
     assert item['status'] == 'FAILED'
     assert 'error' in item
 
+
+@patch('app.sqs_client.send_message')
 @patch('app.lambda_client.invoke')
-def test_repeated_analyze(mock_invoke, dynamodb, s3):
-    create_response = create_case_handler({}, {})
+def test_worker_requeues_transient_provider_failure(mock_invoke, mock_send, dynamodb, s3):
+    create_response = create_case_handler(auth_event(), {})
+    case_id = json.loads(create_response['body'])['caseId']
+    s3.put_object(Bucket='test-evidence-bucket', Key=f"cases/{case_id}/input", Body=b'dummy')
+    mock_invoke.return_value = lambda_error_response('AI_PROVIDER_RATE_LIMITED', 'Try again shortly.')
+
+    assert analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})['statusCode'] == 202
+    analysis_worker_handler({'Records': [{'body': json.dumps({'caseId': case_id})}]}, {})
+
+    item = dynamodb.Table('test-cases-table').get_item(Key={'caseId': case_id})['Item']
+    assert item['status'] == 'PROCESSING'
+    assert item['analysisAttempts'] == 1
+    assert mock_send.call_count == 2
+    assert mock_send.call_args.kwargs['DelaySeconds'] == 30
+
+
+@patch('app.sqs_client.send_message')
+@patch('app.lambda_client.invoke')
+def test_worker_marks_case_failed_after_retry_budget(mock_invoke, mock_send, dynamodb, s3):
+    create_response = create_case_handler(auth_event(), {})
+    case_id = json.loads(create_response['body'])['caseId']
+    s3.put_object(Bucket='test-evidence-bucket', Key=f"cases/{case_id}/input", Body=b'dummy')
+    mock_invoke.return_value = lambda_error_response('AI_PROVIDER_UNAVAILABLE', 'Temporarily unavailable.')
+
+    assert analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})['statusCode'] == 202
+    dynamodb.Table('test-cases-table').update_item(
+        Key={'caseId': case_id},
+        UpdateExpression='SET analysisAttempts = :attempts',
+        ExpressionAttributeValues={':attempts': 2},
+    )
+    analysis_worker_handler({'Records': [{'body': json.dumps({'caseId': case_id})}]}, {})
+
+    item = dynamodb.Table('test-cases-table').get_item(Key={'caseId': case_id})['Item']
+    assert item['status'] == 'FAILED'
+    assert item['error'] == 'Temporarily unavailable.'
+    assert mock_send.call_count == 1
+
+@patch('app.sqs_client.send_message')
+def test_repeated_analyze(mock_send, dynamodb, s3):
+    create_response = create_case_handler(auth_event(), {})
     case_id = json.loads(create_response['body'])['caseId']
     s3.put_object(Bucket='test-evidence-bucket', Key=f"cases/{case_id}/input", Body=b'dummy')
 
-    mock_payload = {
-        "messageText": "Hello",
-        "claimedOrganization": "Bank",
-        "urls": [],
-        "phoneNumbers": [],
-        "upiIds": [],
-        "amounts": [],
-        "asksForPayment": False,
-        "asksForOtp": False,
-        "asksForPassword": False,
-        "threatLanguage": [],
-        "urgencyLanguage": []
-    }
-
-    mock_invoke.return_value = lambda_response(mock_payload)
-
     # First call
-    res1 = analyze_case_handler({'pathParameters': {'caseId': case_id}}, {})
-    assert res1['statusCode'] == 200
+    res1 = analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})
+    assert res1['statusCode'] == 202
 
     # Second call
-    res2 = analyze_case_handler({'pathParameters': {'caseId': case_id}}, {})
+    res2 = analyze_case_handler(auth_event(pathParameters={'caseId': case_id}), {})
     assert res2['statusCode'] == 409
