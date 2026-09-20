@@ -156,7 +156,7 @@ function EntityChip({ label, value, accent = false }) {
 export default function ResultView({ result, onReset }) {
   if (!result) return null;
 
-  const { risk, evidence } = result;
+  const { risk, evidence, isDemoFixture } = result;
   const isRiskReady = risk?.level;
 
   return (
@@ -173,7 +173,14 @@ export default function ResultView({ result, onReset }) {
     >
       {/* ── Risk Summary ── */}
       {isRiskReady ? (
-        <RiskSummary risk={risk} />
+        <>
+          <RiskSummary risk={risk} />
+          {isDemoFixture && (
+            <span className="self-center rounded-full border border-amber-200/30 bg-amber-200/5 px-3 py-1 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-amber-100/75">
+              Synthetic demo case
+            </span>
+          )}
+        </>
       ) : (
         <motion.div
           initial={{ opacity: 0, y: 20 }}

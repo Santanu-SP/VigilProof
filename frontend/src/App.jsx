@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { createCase, uploadEvidence, startAnalysis, getCase } from './services/api';
+import { getDemoUrlResult, isDemoUrl } from './demo/demoFixtures';
 
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
@@ -131,6 +132,7 @@ function InvestigationFlow() {
     setResult({
       evidence: caseData.evidence ?? null,
       risk: caseData.risk ?? null,
+      isDemoFixture: caseData.isDemoFixture === true,
     });
     setStage('RESULT');
   };
@@ -207,6 +209,16 @@ function InvestigationFlow() {
       setSavedCaseId(null);
       setStage('UPLOADING');
       setStatusMessage('UPLOADING');
+
+      if (inputType === 'URL' && isDemoUrl(url)) {
+        setStage('PROCESSING');
+        setStatusMessage('analyzing_evidence');
+        await new Promise(resolve => setTimeout(resolve, 750));
+        showCompletedCase(getDemoUrlResult());
+        inspectionInFlightRef.current = false;
+        setIsSubmitting(false);
+        return;
+      }
 
       // 1. Create Case
       const { caseId, uploadUrl } = await createCase(inputType, url.trim());
